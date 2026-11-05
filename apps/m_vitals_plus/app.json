@@ -59,6 +59,8 @@
       "iat": [
         { "did": "580F", "bytes": 1, "at": 0, "factor": 0.75, "offset": -48, "min": -40, "max": 150,
           "note": "ITANS Ansaugluft-Temperatur, deg C" },
+        { "did": "529A", "bytes": 1, "at": 0, "factor": 1, "offset": -40, "min": -40, "max": 150,
+          "note": "KRAFTSTOFFQUALITAET (Bosch HFM fuel-quality sensor reading, raw). NOT a real fuel-quality metric: on B58 it typically tracks intake-air temperature. Read-only probe, harmless; listed here so its raw value lands in the log for cross-checking against ITANS." },
         { "did": "F40F", "bytes": 1, "at": 0, "factor": 1, "offset": -40, "min": -40, "max": 150,
           "note": "OBD PID 0x0F intake air temperature" },
         { "obd": "0F", "bytes": 1, "at": 0, "factor": 1, "offset": -40, "min": -40, "max": 150 }
