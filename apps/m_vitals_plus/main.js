@@ -18,11 +18,6 @@ var settingsStore = require("settings");
 var diagnostic = require("diagnostic");
 var log = require("log").of("main");
 
-/* oil temperature is not a DME DID on the B58; it rides on the instrument
- * cluster COM signal (raw degC + 40, 235 = invalid). */
-var OIL_TEMP_OFFSET = 40;
-var OIL_TEMP_INVALID = 235;
-
 /* ------------------------------------------------------------------ */
 /* constants                                                          */
 /* ------------------------------------------------------------------ */
@@ -70,12 +65,19 @@ var v = {
   boostFes: null,            // from the sport display signal
   boost: null, iat: null, egt: null, oilPress: null, lambda: null,
   oilTemp: null, gearbox: null, voltage: null, mixtureAdapt: null,
-  baro: null, knockRetard: null,
+  baro: null,                // ambient pressure, kPa (boost = charge - baro)
+  knockRetard: null,
   stamp: {}                  // key -> Date.now() of last good read
 };
 
+// demo mode: fills every tile with plausible simulated data so the UI can be
+// checked without the car. "auto" = on when no vehicle signals arrive.
+var gDemoTimer = null;
+var gDemoT = 0;
+var gLastSignalMs = 0;
+
 var counters = { knock: 0, misfireCount: 0 };
-var prev = { knockActive: false, misfireTotal: -1 };
+var prev = { knockActive: false };   // plus per-cylinder misfire baselines
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
@@ -106,16 +108,8 @@ function isFresh(key) {
 function markFresh(key) { v.stamp[key] = Date.now(); }
 
 function valueFor(key) {
-  if (key === "boost") {
-    // boost source setting: auto / fes / dme
-    var src = gSettings.boostSource || "auto";
-    if (src === "fes") return num(v.boostFes) ? v.boostFes : null;
-    if (src === "dme") return isFresh("boost") ? v.boost : null;
-    // auto: prefer the live DME figure, fall back to the sport display
-    if (isFresh("boost")) return v.boost;
-    if (num(v.boostFes)) return v.boostFes;
-    return null;
-  }
+  if (key === "boost") return currentBoost();
+  if (key === "lambda") return currentLambda();
   // signal-fed values are push-based and always current while driving
   if (key === "coolant" || key === "oilTemp" || key === "rpm") {
     return num(v[key]) ? v[key] : null;
@@ -123,10 +117,33 @@ function valueFor(key) {
   return isFresh(key) ? v[key] : null;
 }
 
-/* current boost used by the knock gate (null when unknown -> no counting) */
+/* boost in bar: the DME poll gives absolute charge pressure (kPa), the
+ * displayed figure is relative to ambient -> charge - baro. The FES sport
+ * display signal is already a relative figure, used as-is. */
+function boostBar() {
+  if (isFresh("boost") && isFresh("baro")) return (v.boost - v.baro) / 100;
+  return null;
+}
+
 function currentBoost() {
-  var b = valueFor("boost");
-  return num(b) ? b : null;
+  // boost source setting: auto / fes / dme
+  var src = gSettings.boostSource || "auto";
+  if (src === "fes") return num(v.boostFes) ? v.boostFes : null;
+  var rel = boostBar();
+  if (src === "dme") return rel;
+  // auto: prefer the live DME figure, fall back to the sport display
+  if (num(rel)) return rel;
+  if (num(v.boostFes)) return v.boostFes;
+  return null;
+}
+
+/* mixture: instantaneous lambda; when the DME also gives the learned
+ * adaptation factor, show the effective mixture (lambda x adapt). */
+function currentLambda() {
+  if (!isFresh("lambda")) return null;
+  var lam = v.lambda;
+  if (isFresh("mixtureAdapt") && num(v.mixtureAdapt)) lam *= v.mixtureAdapt;
+  return lam;
 }
 
 /* ------------------------------------------------------------------ */
@@ -274,6 +291,7 @@ function render() {
 /* ------------------------------------------------------------------ */
 
 function onSignal(name, value) {
+  gLastSignalMs = Date.now();   // real car data present -> demo mode steps back
   switch (name) {
     case "statusEngineSpeed2": {
       var raw = Number(value);
@@ -285,6 +303,12 @@ function onSignal(name, value) {
       var r2 = Number(value);
       var sc2 = gConfig.scaling.engineTemp;
       v.coolant = (r2 === sc2.invalid) ? null : r2 * sc2.factor + sc2.offset;
+      break;
+    }
+    case "statusOilTemperature": {
+      // instrument cluster COM signal: raw degC + 40, 235 = invalid
+      var rO = Number(value);
+      if (rO !== 235 && isFinite(rO)) { v.oilTemp = rO - 40; markFresh("oilTemp"); }
       break;
     }
     case "statusCarSpeed2": {
@@ -311,7 +335,31 @@ function onSignal(name, value) {
 var gPollTimer = null;
 var gPollIdx = 0;
 var gResolved = {};   // metric -> candidate that passed plausibility
-var gDmeCfg = null;
+var gDmeCfg = null;   // config.dme from app.json (set in init)
+
+/* metric names in poll order (baro first: boost needs it) */
+var POLL_METRICS = ["iat", "egt", "oilPressAbs", "boost", "lambda",
+                    "mixtureAdapt", "knockRetard", "baro",
+                    "gearbox", "voltage"];
+
+function metricList(metric) {
+  var list = gDmeCfg[metric];
+  if (!list) return null;
+  if (Object.prototype.toString.call(list) === "[object Array]") return list;
+  // single-candidate object form: wrap it
+  if (typeof list === "object") return [list];
+  return null;
+}
+
+function nextCandidate(metric, cand) {
+  if (gResolved[metric]) return;           // already locked onto a good one
+  var list = metricList(metric);
+  if (!list) return;
+  var idx = list.indexOf(cand);
+  gPollOrder[metric] = (idx + 1) % list.length;
+}
+
+var gPollOrder = {};  // metric -> index of the candidate to try next
 
 function decode(rawHex, cand) {
   // rawHex: string like "AABBCCDD"; returns scaled value or null
@@ -328,59 +376,57 @@ function decode(rawHex, cand) {
   return val * cand.factor + (cand.offset || 0);
 }
 
-function storeMetric(metric, val, cand) {
+function storeMetric(vkey, val, cand) {
   if (!num(val)) return false;
   if (cand && (val < cand.min || val > cand.max)) return false;
-  v[metric] = val;
-  v.stamp[metric] = Date.now();
+  v[vkey] = val;
+  v.stamp[vkey] = Date.now();
   return true;
 }
 
+/* side effects on a fresh reading */
+function afterStore(metric, val) {
+  if (metric === "knockRetard") handleKnock(val);
+  if (metric === "oilPressAbs") v.oilPress = val - (num(v.baro) ? v.baro / 10 : 1.0);
+  if (metric === "baro" && isFresh("oilPressAbs")) {
+    v.oilPress = v.oilPressAbs - v.baro / 10;   // refresh relative pressure
+  }
+}
+
 function pollOne() {
-  var metrics = ["iat", "egt", "oilPress", "boost", "lambda", "oilTemp",
-                 "gearbox", "voltage", "knockRetard"];
-  var metric = metrics[gPollIdx % metrics.length];
+  var metric = POLL_METRICS[gPollIdx % POLL_METRICS.length];
   gPollIdx++;
 
-  var list = gDmeCfg[metric];
+  var list = metricList(metric);
   if (!list || !list.length) return;
 
-  var cand = gResolved[metric] || list[0];
+  var cand = gResolved[metric] || list[gPollOrder[metric] || 0];
   var req = buildReadRequest(metric, cand);
   if (!req) return;
 
   diagnostic.readData(req.ecu, req.ids, function (res) {
     if (!res || !res.data) {
-      // candidate may not exist on this DME: rotate to the next one
-      if (!gResolved[metric]) {
-        var idx = list.indexOf(cand);
-        gResolved[metric] = null;
-        list._next = (idx + 1) % list.length;
-      }
+      nextCandidate(metric, cand);   // this DID may not exist on this DME
       return;
     }
-    var hex = res.data; // "AABB.."
-    var val = decode(hex, cand);
+    var val = decode(res.data, cand); // rawHex -> scaled physical value
     if (storeMetric(metric, val, cand)) {
       gResolved[metric] = cand;
-      if (metric === "knockRetard") handleKnock(val);
-    } else if (!gResolved[metric]) {
-      // implausible: try next candidate next round
-      var idx2 = list.indexOf(cand);
-      list._next = (idx2 + 1) % list.length;
+      afterStore(metric, val);
+    } else {
+      nextCandidate(metric, cand);   // implausible: try the next candidate
     }
   });
 }
 
 function buildReadRequest(metric, cand) {
-  var ecu = cand.ecu || gDmeCfg.__proto__ && undefined;
-  ecu = cand.ecu !== undefined ? cand.ecu : (gSettings.ecu !== undefined ? gSettings.ecu : 18);
-  if (cand.did) return { ecu: ecu, ids: [{ type: "did", id: parseInt(cand.did, 16) }] };
-  if (cand.obd) return { ecu: ecu, ids: [{ type: "obdid", id: parseInt(cand.obd, 16) }] };
-  // "F4xxx" style: first byte 0xF4 = OBD request, second = PID
+  var ecu = cand.ecu !== undefined ? cand.ecu : gDmeCfg.ecu;
+  // "F4xx": first byte 0xF4 = OBD request id, second byte = PID
   if (cand.did && /^F4/i.test(cand.did)) {
     return { ecu: ecu, ids: [{ type: "obdid", id: parseInt(cand.did.substr(2), 16) }] };
   }
+  if (cand.did) return { ecu: ecu, ids: [{ type: "did", id: parseInt(cand.did, 16) }] };
+  if (cand.obd) return { ecu: ecu, ids: [{ type: "obdid", id: parseInt(cand.obd, 16) }] };
   return null;
 }
 
@@ -395,22 +441,33 @@ function handleKnock(retard) {
   prev.knockActive = active;
 }
 
-/* misfire: OBD service 06 test per cylinder; sum increments while boosting */
+/* misfire: OBD service 06, one MID per cylinder; the DME reports the number
+ * of misfires in the current driving cycle (it resets at each cycle start).
+ * Increments between polls count as new events - but only while boost is
+ * above the gate (> 0.5 bar), same rule as knock. */
+var MISFIRE_MIDS = ["A2", "A3", "A4", "A5"];   // cylinders 1..4 (extend to A6 for I6)
+
 function pollMisfires() {
   var cfg = gDmeCfg.misfire;
   if (!cfg || !cfg.tid) return;
-  diagnostic.testOBD({ tid: cfg.tid, mid: "A2" }, function (res) {
-    if (!res || !res.data) return;
-    var total = parseInt(res.data, 16) || 0;   // count of misfires, this cycle
-    var boosting = currentBoost();
-    if (total > prev.misfireTotal) {
-      var delta = total - prev.misfireTotal;
-      if (num(boosting) && boosting > KNOCK_BOOST_GATE) {
-        counters.misfireCount += delta;
-        log.info("misfires +" + delta, "boost", boosting);
+  var ecu = cfg.ecu !== undefined ? cfg.ecu : gDmeCfg.ecu;
+  var boosting = currentBoost();
+  var gated = num(boosting) && boosting > KNOCK_BOOST_GATE;
+
+  MISFIRE_MIDS.forEach(function (mid, cyl) {
+    diagnostic.testOBD({ tid: cfg.tid, mid: mid }, function (res) {
+      if (!res || !res.data) return;
+      var total = parseInt(res.data, 16) || 0;
+      var prevKey = "misCyl" + cyl;
+      var old = prev[prevKey];
+      prev[prevKey] = total;
+      if (old === undefined) return;          // first read: baseline only
+      if (total <= old) return;               // no new events (or cycle reset)
+      if (gated) {
+        counters.misfireCount += total - old;
+        log.info("misfires cyl" + (cyl + 1) + " +" + (total - old), "boost", boosting);
       }
-    }
-    prev.misfireTotal = total;
+    });
   });
 }
 
@@ -429,6 +486,60 @@ function stopPolling() {
 }
 
 /* ------------------------------------------------------------------ */
+/* demo mode (simulated data so the UI can be checked without the car) */
+/* ------------------------------------------------------------------ */
+
+function demoOn() {
+  var mode = gSettings.demo || "auto";
+  if (mode === "on") return true;
+  if (mode === "off") return false;
+  // auto: active when no vehicle signal arrived for a while (not in the car)
+  return Date.now() - gLastSignalMs > 5000;
+}
+
+function demoStep() {
+  gDemoT += 0.35;
+  var t = gDemoT;
+  var load = Math.max(0, Math.sin(t * 0.4));            // 0..1 throttle waves
+  function set(key, val) { v[key] = val; markFresh(key); }
+
+  set("rpm", 900 + load * 5200 + 150 * Math.sin(t * 2.3));
+  set("boost", 101 + load * 135);                        // kPa absolute
+  set("baro", 100.5);                                    // kPa
+  set("boostFes", load * 1.32);                          // bar, relative
+  set("iat", 28 + load * 22);
+  set("egt", 480 + load * 430);
+  set("oilPressAbs", 1.0 + load * 4.6 + 10.0);           // bar absolute
+  set("lambda", 0.99 + 0.07 * load);
+  set("mixtureAdapt", 1.0);
+  set("coolant", 92 + 4 * Math.sin(t * 0.15));
+  set("oilTemp", 95 + load * 30);
+  set("voltage", 13.9 + 0.3 * Math.sin(t));
+  set("gearbox", 78 + load * 25);
+  afterStore("oilPressAbs", v.oilPressAbs);              // relative pressure
+
+  // occasional knock event under load -> counter ticks (boost > 0.5 gate)
+  var retard = (load > 0.7 && Math.sin(t * 1.7) > 0.97) ? -3.5 : 0;
+  set("knockRetard", retard);
+  handleKnock(retard);
+
+  // occasional misfire burst under load
+  if (load > 0.6 && Math.sin(t * 2.9) > 0.985) counters.misfireCount++;
+}
+
+function startDemo() {
+  stopDemo();
+  gDemoTimer = setInterval(function () {
+    if (demoOn()) demoStep();
+  }, REFRESH_MS);
+}
+
+function stopDemo() {
+  if (gDemoTimer) clearInterval(gDemoTimer);
+  gDemoTimer = null;
+}
+
+/* ------------------------------------------------------------------ */
 /* settings                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -436,6 +547,7 @@ function loadSettings() {
   settingsStore.loadAll(function (s) {
     gSettings = s || {};
     startPolling();
+    startDemo();
   });
 }
 
@@ -451,6 +563,7 @@ function init(app) {
 
   signals.subscribe("statusEngineSpeed2", onSignal);
   signals.subscribe("statusEngineTemperature", onSignal);
+  signals.subscribe("statusOilTemperature", onSignal);
   signals.subscribe("statusCarSpeed2", onSignal);
   signals.subscribe("displayBoostPressure", onSignal);
 
