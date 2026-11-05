@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="720" viewBox="0 0 1920 720">
+<rect x="0" y="0" width="1920" height="720" fill="#000"/>
+<rect x="0" y="0" width="1920" height="720" fill="#14161a"/>
+<rect x="0" y="0" width="1920" height="65" fill="#1f2329"/>
+<text x="240" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">MAIN</text>
+<rect x="72" y="61" width="336" height="4" fill="#0f9dca"/>
+<text x="720" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
+<text x="1200" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">BOOST GAUGE</text>
+<text x="1680" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">LOGS</text>
+<rect x="3" y="68" width="474" height="183" rx="10" fill="#14161a"/>
+<text x="19" y="101.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="28" text-anchor="start">Boost</text>
+<text x="19" y="191.6" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="76" font-weight="bold" text-anchor="start">0.01</text>
+<text x="108.60000000000001" y="186.4" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="38" text-anchor="start">bar</text>
+<rect x="483" y="68" width="474" height="183" rx="10" fill="#14161a"/>
+<text x="499" y="101.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="28" text-anchor="start">Intake temp</text>
+<text x="499" y="191.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="76" font-weight="bold" text-anchor="start">28</text>
+<text x="546.8" y="186.4" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="38" text-anchor="start">°C</text>
+<rect x="963" y="68" width="474" height="183" rx="10" fill="#14161a"/>
+<text x="979" y="101.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="28" text-anchor="start">Exhaust temp</text>
+<text x="979" y="191.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="76" font-weight="bold" text-anchor="start">480</text>
+<text x="1047.7" y="186.4" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="38" text-anchor="start">°C</text>
+<rect x="1443" y="68" width="474" height="183" rx="10" fill="#14161a"/>
+<text x="1459" y="101.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="28" text-anchor="start">Oil press</text>
+<text x="1459" y="191.6" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="76" font-weight="bold" text-anchor="start">--</text>
+<text x="1506.8" y="186.4" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="38" text-anchor="start">bar</text>
+<rect x="3" y="257" width="474" height="183" rx="10" fill="#14161a"/>
+<text x="19" y="290.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="28" text-anchor="start">Mixture λ</text>
+<text x="19" y="380.6" fill="#3fbf5a" font-family="DejaVu Sans, Arial, sans-serif" font-size="76" font-weight="bold" text-anchor="start">0.99</text>
+<rect x="483" y="257" width="474" height="183" rx="10" fill="#14161a"/>
+<text x="499" y="290.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="28" text-anchor="start">Coolant</text>
+<text x="499" y="380.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="76" font-weight="bold" text-anchor="start">89</text>
+<text x="546.8" y="375.4" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="38" text-anchor="start">°C</text>
+<rect x="963" y="257" width="474" height="183" rx="10" fill="#14161a"/>
+<text x="979" y="290.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="28" text-anchor="start">Oil temp</text>
+<text x="979" y="380.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="76" font-weight="bold" text-anchor="start">95</text>
+<text x="1026.8" y="375.4" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="38" text-anchor="start">°C</text>
+<rect x="1443" y="257" width="474" height="183" rx="10" fill="#14161a"/>
+<text x="1459" y="290.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="28" text-anchor="start">Engine rpm</text>
+<text x="1459" y="380.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="76" font-weight="bold" text-anchor="start">1050</text>
+<rect x="3" y="447.9" width="474" height="269.09999999999997" rx="10" fill="#14161a"/>
+<text x="28" y="498.1" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="41" text-anchor="start">Battery</text>
+<text x="28" y="628.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="110" font-weight="bold" text-anchor="start">14.0</text>
+<text x="155" y="622.5" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="55" text-anchor="start">V</text>
+<rect x="483" y="447.9" width="474" height="269.09999999999997" rx="10" fill="#14161a"/>
+<text x="508" y="498.1" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="41" text-anchor="start">Gearbox</text>
+<text x="508" y="628.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="110" font-weight="bold" text-anchor="start">78</text>
+<text x="574.5" y="622.5" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="55" text-anchor="start">°C</text>
+<rect x="963" y="447.9" width="474" height="269.09999999999997" rx="10" fill="#14161a"/>
+<text x="988" y="498.1" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="41" text-anchor="start">Knock events</text>
+<text x="988" y="628.6" fill="#e8452c" font-family="DejaVu Sans, Arial, sans-serif" font-size="110" font-weight="bold" text-anchor="start">1</text>
+<rect x="1443" y="447.9" width="474" height="269.09999999999997" rx="10" fill="#14161a"/>
+<text x="1468" y="498.1" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="41" text-anchor="start">Misfires</text>
+<text x="1468" y="628.6" fill="#e8452c" font-family="DejaVu Sans, Arial, sans-serif" font-size="110" font-weight="bold" text-anchor="start">2</text>
+</svg>

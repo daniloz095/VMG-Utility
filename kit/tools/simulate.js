@@ -1,0 +1,371 @@
+/*
+ * UI simulator — render the app's canvas screens to PNG files, without
+ * the car and without oap-sdk.
+ *
+ *   node kit/tools/simulate.js m_vitals_plus              # all tabs
+ *   node kit/tools/simulate.js m_vitals_plus power        # one tab only
+ *   node kit/tools/simulate.js m_vitals_plus --out /tmp/ui
+ *
+ * How it works: main.js is loaded against a mock of the OAP modules
+ * (os/signals/settings/diagnostic/log) plus a pure-JS 2D canvas that
+ * records every draw call. The recorded frame is replayed into an SVG at
+ * the MGU screen resolution (1920x720); a tiny python cairosvg step turns
+ * it into a PNG. Demo mode is forced ON so every tile shows plausible
+ * simulated values after a few seconds of runtime.
+ */
+
+"use strict";
+
+var fs = require("fs");
+var path = require("path");
+var Module = require("module");
+var child_process = require("child_process");
+
+var APPS_DIR = process.env.SIM_APPS_DIR || path.join(__dirname, "..", "..", "apps");
+var SCREEN_W = 1920;
+var SCREEN_H = 720;
+
+/* ------------------------------------------------------------------ */
+/* command line                                                        */
+/* ------------------------------------------------------------------ */
+
+var args = process.argv.slice(2);
+var appName = null;
+var tabFilter = null;
+var outDir = null;
+for (var i = 0; i < args.length; i++) {
+  if (args[i] === "--out") { outDir = args[++i]; continue; }
+  if (!appName) appName = args[i];
+  else tabFilter = args[i];
+}
+if (!appName) {
+  console.error("usage: node kit/tools/simulate.js <app> [tab] [--out dir]");
+  process.exit(1);
+}
+var appDir = path.join(APPS_DIR, appName);
+var appJson = JSON.parse(fs.readFileSync(path.join(appDir, "app.json"), "utf8"));
+var mainJs = fs.readFileSync(path.join(appDir, "main.js"), "utf8");
+if (!outDir) outDir = path.join(appDir, "sim");
+fs.mkdirSync(outDir, { recursive: true });
+
+/* ------------------------------------------------------------------ */
+/* recording 2D context                                                */
+/* ------------------------------------------------------------------ */
+
+function makeRecorder() {
+  var ops = [];
+  var rec = { recording: true };       // shared gate: push() checks it
+  var st = { fillStyle: "#ffffff", strokeStyle: "#ffffff", lineWidth: 1,
+             font: "16px sans-serif", textAlign: "left", textBaseline: "alphabetic" };
+  function push(o) { if (rec.recording) ops.push(o); }
+  var ctx = {
+    setTransform: function () {}, save: function () {}, restore: function () {},
+    beginPath: function () {}, closePath: function () {}, clip: function () {},
+    moveTo: function (x, y) { push({ op: "moveTo", x: x, y: y }); },
+    lineTo: function (x, y) { push({ op: "lineTo", x: x, y: y }); },
+    quadraticCurveTo: function () {}, bezierCurveTo: function () {}, rect: function () {},
+    arc: function (x, y, r) {
+      push({ op: "arc", x: x, y: y, r: r });
+    },
+    fillRect: function (x, y, w, h) { push({ op: "fillRect", x: x, y: y, w: w, h: h, style: st.fillStyle }); },
+    strokeRect: function (x, y, w, h) { push({ op: "strokeRect", x: x, y: y, w: w, h: h, style: st.strokeStyle }); },
+    fillRoundRect: function (x, y, w, h, r) { push({ op: "fillRoundRect", x: x, y: y, w: w, h: h, r: r, style: st.fillStyle }); },
+    stroke: function () { push({ op: "strokePath", style: st.strokeStyle, lw: st.lineWidth }); },
+    fill: function () { push({ op: "fillPath", style: st.fillStyle }); },
+    fillCircle: function (x, y, r) { push({ op: "fillCircle", x: x, y: y, r: r, style: st.fillStyle }); },
+    fillText: function (t, x, y) {
+      push({ op: "fillText", t: String(t), x: x, y: y, style: st.fillStyle,
+                 font: st.font, align: st.textAlign, baseline: st.textBaseline });
+    },
+    measureText: function (t) {
+      var m = /(\d+(?:\.\d+)?)px/.exec(st.font);
+      var px = m ? parseFloat(m[1]) : 16;
+      var bold = /bold/.test(st.font);
+      return { width: String(t).length * px * (bold ? 0.62 : 0.55) };
+    }
+  };
+  // NOTE: the app uses the mgu-renderd calling convention where fillStyle /
+  // strokeStyle are SETTER FUNCTIONS: ctx.fillStyle("#fff"). We expose them
+  // as callable functions that also work as plain assignments.
+  function styleAccessor(key) {
+    var fn = function (v) { st[key] = v; };
+    Object.defineProperty(fn, "value", {
+      get: function () { return st[key]; },
+      set: function (v) { st[key] = v; }
+    });
+    return fn;
+  }
+  ctx.fillStyle = styleAccessor("fillStyle");
+  ctx.strokeStyle = styleAccessor("strokeStyle");
+  Object.defineProperty(ctx, "lineWidth", { get: function () { return st.lineWidth; }, set: function (v) { st.lineWidth = v; } });
+  Object.defineProperty(ctx, "font", { get: function () { return st.font; }, set: function (v) { st.font = v; } });
+  Object.defineProperty(ctx, "textAlign", { get: function () { return st.textAlign; }, set: function (v) { st.textAlign = v; } });
+  Object.defineProperty(ctx, "textBaseline", { get: function () { return st.textBaseline; }, set: function (v) { st.textBaseline = v; } });
+  Object.defineProperty(ctx, "globalAlpha", { get: function () { return 1; }, set: function () {} });
+  Object.defineProperty(ctx, "lineJoin", { get: function () { return "miter"; }, set: function () {} });
+  Object.defineProperty(ctx, "lineCap", { get: function () { return "butt"; }, set: function () {} });
+  return { ctx: ctx, ops: ops, rec: rec };
+}
+
+/* ------------------------------------------------------------------ */
+/* theme colors (approximation of the dark MGU theme)                  */
+/* ------------------------------------------------------------------ */
+
+var THEME = {
+  background: "#14161a",
+  surface: "#1f2329",
+  divider: "#33383f",
+  textPrimary: "#eef1f4",
+  textSecondary: "#9aa3ad",
+  textTertiary: "#5b636c",
+  accent: "#0f9dca",
+  warning: "#f0a12f",
+  alert: "#e8452c",
+  success: "#3fbf5a"
+};
+
+/* ------------------------------------------------------------------ */
+/* module mocks                                                        */
+/* ------------------------------------------------------------------ */
+
+var recorder = makeRecorder();
+var canvas = { width: SCREEN_W, height: SCREEN_H, getContext: function () { return recorder.ctx; } };
+var gSimSignalCb = null;   // the app's onSignal callback (via signals.subscribe)
+
+// Simulated SOME/IP feed: a few plausible push values (demo mode is forced
+// ON via settings anyway; this just mirrors what the car would push).
+var gRealNow = Date.now.bind(Date);
+var gSimNow = gRealNow();
+function simTick() {
+  gSimNow += 200;
+  if (gSimSignalCb) {
+    var rpmRaw = Math.round((1200 + 800 * Math.sin(gSimNow / 900)) / 0.25);
+    gSimSignalCb("statusEngineSpeed2", rpmRaw);
+  }
+}
+
+var mocks = {
+  os: {
+    theme: function () { return { colors: THEME }; },
+    getScreen: function () { return { canvas: canvas }; },
+    onchange: null,
+    buttonhandler: null,
+    touchhandler: null,
+    exit: function () {},
+    navigateTo: function () {}
+  },
+  signals: { subscribe: function (n, cb) { gSimSignalCb = cb; } },
+  settings: { loadAll: function (cb) { cb({ demo: "on" }); } },
+  diagnostic: {
+    readData: function (ecu, ids, cb) { cb(null); },     // no car: demo fills in
+    testOBD: function (req, cb) { cb(null); }
+  },
+  log: {
+    of: function () {
+      return { debug: function () {}, info: function () {}, warn: function () {}, error: function () {} };
+    }
+  }
+};
+
+var origLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  if (Object.prototype.hasOwnProperty.call(mocks, request)) return mocks[request];
+  return origLoad.apply(this, arguments);
+};
+
+/* ------------------------------------------------------------------ */
+/* run the app for N simulated seconds                                 */
+/* ------------------------------------------------------------------ */
+
+/* synchronous timer driver: setInterval/setTimeout callbacks run on the
+ * simulated clock, so N "seconds" of runtime finish instantly */
+var gTimers = [];
+var gTimerId = 1;
+global.setInterval = function (fn, ms) {
+  var id = gTimerId++;
+  gTimers.push({ id: id, fn: fn, ms: ms, next: gSimNow + ms, repeat: true });
+  return id;
+};
+global.setTimeout = function (fn, ms) {
+  var id = gTimerId++;
+  gTimers.push({ id: id, fn: fn, ms: ms || 0, next: gSimNow + (ms || 0), repeat: false });
+  return id;
+};
+global.clearInterval = global.clearTimeout = function (id) {
+  for (var i = 0; i < gTimers.length; i++) if (gTimers[i].id === id) { gTimers.splice(i, 1); return; }
+};
+
+function advance(ms) {
+  var end = gSimNow + ms;
+  var guard = 0;
+  while (guard++ < 200000) {
+    var due = null;
+    for (var i = 0; i < gTimers.length; i++) {
+      var t = gTimers[i];
+      if (t.next <= end && (!due || t.next < due.next)) due = t;
+    }
+    if (!due) break;
+    gSimNow = Math.max(gSimNow, due.next);
+    if (due.repeat) due.next = gSimNow + due.ms;
+    else { var ix = gTimers.indexOf(due); if (ix >= 0) gTimers.splice(ix, 1); }
+    try { due.fn(); } catch (e) { console.error("timer cb threw:", e.stack || e); process.exit(1); }
+  }
+  gSimNow = end;
+}
+
+function runApp(seconds, onReady) {
+  var mod = { exports: {} };
+  // the app gets its OWN Date object on the simulated clock; the tool keeps
+  // the real one (otherwise setTimeout(…,60) below would never fire)
+  var SimDate = function () {};
+  SimDate.now = function () { return gSimNow; };
+  new Function("exports", "require", "module", "__filename", "__dirname", "Date", mainJs)
+    (mod.exports, require, mod, path.join(appDir, "main.js"), appDir, SimDate);
+
+  var app = { config: appJson.config, settings: {} };
+  try {
+    mod.exports.init(app);            // registers loadSettings -> setTimeout(0)
+    advance(1);                        // flush: settings loaded, pollers started
+    if (mocks.os.onchange) mocks.os.onchange("MAIN");
+    // simulate `seconds` seconds of runtime: demo steps + render ticks
+    for (var s = 0; s < seconds * 5; s++) { simTick(); advance(200); }
+  } catch (e) {
+    console.error("startup threw:", e.stack || e);
+    process.exit(1);
+  }
+  onReady();
+}
+
+/* ------------------------------------------------------------------ */
+/* replay recorded ops into an SVG                                     */
+/* ------------------------------------------------------------------ */
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                   .replace(/"/g, "&quot;");
+}
+
+function parseFont(fontStr) {
+  var bold = /bold/.test(fontStr);
+  var m = /(\d+(?:\.\d+)?)px/.exec(fontStr);
+  return { size: m ? parseFloat(m[1]) : 16, bold: bold };
+}
+
+function svgFromOps(ops) {
+  var parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + SCREEN_W +
+               '" height="' + SCREEN_H + '" viewBox="0 0 ' + SCREEN_W + " " + SCREEN_H + '">'];
+  parts.push('<rect x="0" y="0" width="' + SCREEN_W + '" height="' + SCREEN_H + '" fill="#000"/>');
+  var dstr = "";
+  for (var i = 0; i < ops.length; i++) {
+    var o = ops[i];
+    switch (o.op) {
+      case "fillRect":
+        parts.push('<rect x="' + o.x + '" y="' + o.y + '" width="' + Math.max(0, o.w) +
+          '" height="' + Math.max(0, o.h) + '" fill="' + esc(o.style) + '"/>');
+        break;
+      case "fillRoundRect":
+        parts.push('<rect x="' + o.x + '" y="' + o.y + '" width="' + Math.max(0, o.w) +
+          '" height="' + Math.max(0, o.h) + '" rx="' + (o.r || 0) +
+          '" fill="' + esc(o.style) + '"/>');
+        break;
+      case "strokeRect":
+        parts.push('<rect x="' + o.x + '" y="' + o.y + '" width="' + o.w + '" height="' + o.h +
+          '" fill="none" stroke="' + esc(o.style) + '"/>');
+        break;
+      case "moveTo": dstr += "M" + o.x.toFixed(1) + " " + o.y.toFixed(1) + " "; break;
+      case "lineTo": dstr += "L" + o.x.toFixed(1) + " " + o.y.toFixed(1) + " "; break;
+      case "arc":
+        dstr += "M" + (o.x + o.r).toFixed(1) + " " + o.y.toFixed(1) +
+                " A" + o.r + " " + o.r + " 0 1 0 " + (o.x - o.r).toFixed(1) + " " + o.y.toFixed(1) +
+                " A" + o.r + " " + o.r + " 0 1 0 " + (o.x + o.r).toFixed(1) + " " + o.y.toFixed(1) + " Z ";
+        break;
+      case "strokePath":
+        if (dstr) parts.push('<path d="' + dstr + '" fill="none" stroke="' + esc(o.style) +
+          '" stroke-width="' + o.lw + '" stroke-linejoin="round" stroke-linecap="round"/>');
+        dstr = "";
+        break;
+      case "fillPath":
+        if (dstr) parts.push('<path d="' + dstr + '" fill="' + esc(o.style) + '"/>');
+        dstr = "";
+        break;
+      case "fillCircle":
+        parts.push('<circle cx="' + o.x + '" cy="' + o.y + '" r="' + o.r +
+          '" fill="' + esc(o.style) + '"/>');
+        break;
+      case "fillText": {
+        var f = parseFont(o.font);
+        var anchor = o.align === "center" ? "middle" : (o.align === "right" ? "end" : "start");
+        var dy = 0;
+        if (o.baseline === "middle") dy = f.size * 0.35;
+        if (o.baseline === "top") dy = f.size * 0.82;
+        parts.push('<text x="' + o.x + '" y="' + (o.y + dy).toFixed(1) + '" fill="' + esc(o.style) +
+          '" font-family="DejaVu Sans, Arial, sans-serif" font-size="' + f.size + '"' +
+          (f.bold ? ' font-weight="bold"' : "") + ' text-anchor="' + anchor + '">' +
+          esc(o.t) + "</text>");
+        break;
+      }
+    }
+  }
+  parts.push("</svg>");
+  return parts.join("\n");
+}
+
+/* ------------------------------------------------------------------ */
+/* svg -> png (cairosvg if available, otherwise keep the svg)          */
+/* ------------------------------------------------------------------ */
+
+var PY_SNIPPET = "import sys,cairosvg;cairosvg.svg2png(url=sys.argv[1],write_to=sys.argv[2])";
+
+function rasterize(svgPath, pngPath, cb) {
+  try {
+    child_process.execFile("python3", ["-c", PY_SNIPPET, svgPath, pngPath],
+      function (err) { cb(!err); });
+  } catch (e) { cb(false); }
+}
+
+/* ------------------------------------------------------------------ */
+/* main                                                                */
+/* ------------------------------------------------------------------ */
+
+runApp(8, function () {
+  var TAB_LABELS = ["main", "power", "gauge", "logs"];
+  var wanted = tabFilter ? [tabFilter] : TAB_LABELS;
+  var gW = SCREEN_W, gH = SCREEN_H;
+  var queue = wanted.slice();
+  var results = [];
+
+  function next() {
+    if (!queue.length) {
+      results.forEach(function (r) { console.log(r); });
+      process.exit(0);
+    }
+    var tab = queue.shift();
+    var idx = TAB_LABELS.indexOf(tab);
+    if (idx < 0) { results.push("SKIP " + tab + " (unknown tab)"); return next(); }
+
+    // tap the tab strip exactly like on the head unit; touchhandler calls
+    // render() synchronously, so record only that single frame
+    var tabH = Math.round(gH * 0.09);
+    var w = Math.floor(gW / 4);
+    recorder.ops.length = 0;
+    recorder.recording = true;
+    if (mocks.os.touchhandler) mocks.os.touchhandler(w * idx + w / 2, tabH / 2);
+    recorder.recording = false;
+
+    (function () {
+      var ops = recorder.ops.slice();
+      recorder.ops.length = 0;
+      if (!ops.length) { results.push(tab + ": NO DRAW CALLS"); return next(); }
+      var svg = svgFromOps(ops);
+      var svgPath = path.join(outDir, tab + ".svg");
+      var pngPath = path.join(outDir, tab + ".png");
+      fs.writeFileSync(svgPath, svg);
+      rasterize(svgPath, pngPath, function (ok) {
+        results.push((ok ? "OK   " : "SVG  ") + (ok ? pngPath : svgPath) +
+                     "  (" + ops.length + " draw ops)");
+        next();
+      });
+    })();
+  }
+  next();
+});
