@@ -23,11 +23,15 @@ var log = require("log").of("main");
 /* ------------------------------------------------------------------ */
 
 var REFRESH_MS = 200;          // UI redraw period for the main screen
+var POWER_REFRESH_MS = 100;    // faster redraw while the Power tab is open
 var KNOCK_BOOST_GATE = 0.5;    // bar; counters only tick above this boost
 var STALE_MS = 6000;           // a DME value older than this is "not available"
+var PEAK_RESET_MS = 6000;      // peak power/torque reset interval (setting later)
+var CHART_WINDOW_S = 30;       // rolling window of the power/torque chart
 
 var TABS = [
   { id: "main", label: "MAIN" },
+  { id: "power", label: "POWER" },
   { id: "gauge", label: "BOOST GAUGE" },
   { id: "logs", label: "LOGS" }
 ];
@@ -78,6 +82,15 @@ var gLastSignalMs = 0;
 
 var counters = { knock: 0, misfireCount: 0 };
 var prev = { knockActive: false };   // plus per-cylinder misfire baselines
+
+/* Power tab state: instantaneous + peak power/torque and the chart history */
+var power = {
+  kw: null, hp: null, nm: null,     // current values (null = not computed yet)
+  stamp: 0,                         // Date.now() of the last good computation
+  peakHp: null, peakNm: null,       // rolling peaks, reset after PEAK_RESET_MS
+  peakHpAt: 0, peakNmAt: 0,         // when the current peak was set
+  hist: []                          // [{t, hp, nm}] rolling window for the chart
+};
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
@@ -269,6 +282,170 @@ function drawPlaceholder(ctx, top, text) {
 }
 
 /* ------------------------------------------------------------------ */
+/* drawing: Power tab                                                 */
+/* ------------------------------------------------------------------ */
+
+var COL_POWER = "#e8452c";   // power curve (red)
+var COL_TORQUE = "#3aa0ff";  // torque curve (blue)
+
+function drawPower(ctx, top) {
+  var area = gH - top;
+  var numH = Math.round(area * 0.34);
+  var fresh = num(power.hp) && (Date.now() - power.stamp) < STALE_MS;
+
+  // two big number tiles: Power / Torque with current + peak lines
+  var half = Math.floor(gW / 2);
+  drawPowerTile(ctx, 0, top, half, numH, "Power", "hp",
+    fresh ? power.hp : null, fresh ? power.peakHp : null, COL_POWER);
+  drawPowerTile(ctx, half, top, gW - half, numH, "Torque", "nm",
+    fresh ? power.nm : null, fresh ? power.peakNm : null, COL_TORQUE);
+
+  drawPowerChart(ctx, 0, top + numH, gW, area - numH);
+}
+
+function drawPowerTile(ctx, x, y, tw, th, label, kind, cur, peak, col) {
+  ctx.fillStyle(c("surface"));
+  ctx.fillRoundRect(x + 4, y + 4, tw - 8, th - 8, 12);
+
+  var pad = Math.round(th * 0.12);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.font = Math.round(th * 0.16) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  ctx.fillText(label, x + pad, y + pad * 0.6);
+
+  // big current value
+  ctx.font = "bold " + Math.round(th * 0.42) + "px sans-serif";
+  ctx.fillStyle(num(cur) ? col : c("textTertiary"));
+  var txt = num(cur) ? String(Math.round(cur)) : "--";
+  var unit = kind === "hp" ? "hp" : "Nm";
+  ctx.fillText(txt, x + pad, y + th * 0.30);
+  ctx.font = Math.round(th * 0.20) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  var vw = ctx.measureText(txt).width;
+  ctx.fillText(unit, x + pad + vw + 8, y + th * 0.30 + Math.round(th * 0.16));
+
+  // peak line under the number
+  ctx.font = Math.round(th * 0.17) + "px sans-serif";
+  ctx.fillStyle(num(peak) ? col : c("textTertiary"));
+  var ptxt = "PEAK " + (num(peak) ? String(Math.round(peak)) + " " + unit : "--");
+  ctx.fillText(ptxt, x + pad, y + th * 0.76);
+
+  // countdown ticks: shows when the peak will expire (visual only)
+  if (num(peak)) {
+    var ttl = gSettings.peakResetMs || PEAK_RESET_MS;
+    var at = kind === "hp" ? power.peakHpAt : power.peakNmAt;
+    var left = Math.max(0, ttl - (Date.now() - at));
+    var frac = left / ttl;
+    ctx.fillStyle(c("background"));
+    ctx.fillRect(x + pad, y + th - Math.round(th * 0.10), tw - 2 * pad, 4);
+    ctx.fillStyle(col);
+    ctx.fillRect(x + pad, y + th - Math.round(th * 0.10), Math.round((tw - 2 * pad) * frac), 4);
+  }
+}
+
+/* rolling real-time chart of hp and Nm over the last CHART_WINDOW_S seconds */
+function drawPowerChart(ctx, x, y, w, h) {
+  ctx.fillStyle(c("surface"));
+  ctx.fillRoundRect(x + 4, y + 4, w - 8, h - 8, 12);
+
+  var padL = Math.round(w * 0.09);
+  var padR = Math.round(w * 0.03);
+  var padT = Math.round(h * 0.10);
+  var padB = Math.round(h * 0.14);
+  var gx = x + padL, gy = y + padT;
+  var gw = w - padL - padR, gh = h - padT - padB;
+
+  var now = Date.now();
+  var t0 = now - CHART_WINDOW_S * 1000;
+
+  // scale: fixed floors, grow smoothly with the data
+  var maxHp = 50, maxNm = 100;
+  for (var i = 0; i < power.hist.length; i++) {
+    var p = power.hist[i];
+    if (p.hp > maxHp) maxHp = p.hp;
+    if (p.nm > maxNm) maxNm = p.nm;
+  }
+  maxHp = niceCeil(maxHp, 100);
+  maxNm = niceCeil(maxNm, 200);
+
+  // grid + axis labels
+  ctx.strokeStyle(c("divider") || c("textTertiary"));
+  ctx.lineWidth = 1;
+  ctx.textBaseline = "middle";
+  ctx.font = Math.round(h * 0.09) + "px sans-serif";
+  for (var g = 0; g <= 4; g++) {
+    var yy = gy + gh - (gh * g / 4);
+    ctx.beginPath();
+    ctx.moveTo(gx, yy);
+    ctx.lineTo(gx + gw, yy);
+    ctx.stroke();
+    ctx.textAlign = "right";
+    ctx.fillStyle(c("textTertiary"));
+    ctx.fillText(String(Math.round(maxHp * g / 4)), gx - 6, yy);
+  }
+  // right axis: torque scale
+  ctx.textAlign = "left";
+  for (var g2 = 0; g2 <= 4; g2++) {
+    var yy2 = gy + gh - (gh * g2 / 4);
+    ctx.fillStyle(COL_TORQUE);
+    ctx.fillText(String(Math.round(maxNm * g2 / 4)), gx + gw + 4, yy2);
+  }
+  // time axis ticks every 10 s
+  ctx.textAlign = "center";
+  ctx.fillStyle(c("textTertiary"));
+  for (var ts = 0; ts <= CHART_WINDOW_S; ts += 10) {
+    var tx = gx + gw * ts / CHART_WINDOW_S;
+    ctx.fillText(ts === CHART_WINDOW_S ? "now" : "-" + (CHART_WINDOW_S - ts) + "s", tx, gy + gh + padB * 0.55);
+  }
+
+  // series
+  drawSeries(ctx, power.hist, gx, gy, gw, gh, t0, now, "hp", maxHp, COL_POWER);
+  drawSeries(ctx, power.hist, gx, gy, gw, gh, t0, now, "nm", maxNm, COL_TORQUE);
+
+  // legend
+  var ly = y + Math.round(h * 0.045);
+  ctx.textAlign = "left";
+  ctx.font = Math.round(h * 0.09) + "px sans-serif";
+  ctx.fillStyle(COL_POWER);
+  ctx.fillRect(gx, ly - 4, Math.round(w * 0.03), 4);
+  ctx.fillText("Power, hp", gx + Math.round(w * 0.04), ly);
+  var lxo = gx + Math.round(w * 0.04) + ctx.measureText("Power, hp").width + Math.round(w * 0.04);
+  ctx.fillStyle(COL_TORQUE);
+  ctx.fillRect(lxo, ly - 4, Math.round(w * 0.03), 4);
+  ctx.fillText("Torque, Nm", lxo + Math.round(w * 0.04), ly);
+}
+
+function niceCeil(val, step) {
+  return Math.ceil(val / step) * step;
+}
+
+function drawSeries(ctx, hist, gx, gy, gw, gh, t0, now, key, maxVal, col) {
+  if (!hist.length) return;
+  ctx.strokeStyle(col);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  var started = false;
+  for (var i = 0; i < hist.length; i++) {
+    var p = hist[i];
+    if (p.t < t0) continue;
+    var px = gx + gw * (p.t - t0) / (now - t0);
+    var py = gy + gh - gh * Math.min(p[key], maxVal) / maxVal;
+    if (!started) { ctx.moveTo(px, py); started = true; }
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  // leading dot at the newest sample
+  if (started && hist.length) {
+    var last = hist[hist.length - 1];
+    var lx = gx + gw * (last.t - t0) / (now - t0);
+    var ly = gy + gh - gh * Math.min(last[key], maxVal) / maxVal;
+    ctx.fillStyle(col);
+    ctx.fillCircle && ctx.fillCircle(lx, ly, 5);
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* render loop                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -282,8 +459,109 @@ function render() {
 
   var top = drawTabs(ctx);
   if (gActiveTab === "main") drawMain(ctx, top);
+  else if (gActiveTab === "power") drawPower(ctx, top);
   else if (gActiveTab === "gauge") drawPlaceholder(ctx, top, "Boost gauge \u2014 next step");
   else drawPlaceholder(ctx, top, "Session logs \u2014 next step");
+}
+
+/* ------------------------------------------------------------------ */
+/* power & torque                                                     */
+/* ------------------------------------------------------------------ */
+
+var gTorqueMap = null;   // cached interpolation table from app.json config
+
+function loadVolumeL() {
+  var cfg = gConfig && gConfig.engine;
+  if (cfg && num(cfg.displacementL)) return cfg.displacementL;
+  return 3.0;            // B58 default; change in app.json for other engines
+}
+
+function torqueTable() {
+  if (gTorqueMap) return gTorqueMap;
+  var cfg = gConfig && gConfig.engine;
+  var raw = cfg && cfg.torqueVsRpm;
+  var map = [];
+  if (raw && raw.length) {
+    for (var i = 0; i < raw.length; i++) {
+      if (raw[i] && raw[i].length === 2 && num(raw[i][0]) && num(raw[i][1])) {
+        map.push([raw[i][0], raw[i][1]]);
+      }
+    }
+  }
+  map.sort(function (a, b) { return a[0] - b[0]; });
+  gTorqueMap = map.length ? map : [[600, 100], [1300, 450], [5000, 450], [7000, 380]];
+  return gTorqueMap;
+}
+
+/* peak torque at the current rpm from the manufacturer curve */
+function peakTorqueNm(rpm) {
+  var m = torqueTable();
+  if (rpm <= m[0][0]) return m[0][1];
+  var last = m[m.length - 1];
+  if (rpm >= last[0]) return last[1];
+  for (var i = 1; i < m.length; i++) {
+    if (rpm <= m[i][0]) {
+      var x0 = m[i - 1][0], y0 = m[i - 1][1], x1 = m[i][0], y1 = m[i][1];
+      return y0 + (y1 - y0) * (rpm - x0) / (x1 - x0);
+    }
+  }
+  return last[1];
+}
+
+/* Engine load fraction (0..~1.2). Priority:
+ * 1. BMW DME DID F08A "LASTWELL_PZYL" — instantaneous per-cylinder charge
+ *    information in % (direct, exact, tune-independent);
+ * 2. OBD PID 0x63 (engine load %, direct-MAP based) via the F463 alias;
+ * 3. MAP / baro fallback estimate. */
+function calcLoad() {
+  if (isFresh("loadDirect")) return Math.min(1.2, Math.max(0, v.loadDirect / 100));
+
+  if (isFresh("boost") && isFresh("baro") && num(v.baro) && v.baro > 0) {
+    var mapKpa = v.boost;                       // absolute charge pressure
+    var est = mapKpa / v.baro;                  // 1.0 at atmospheric
+    if (est > 1) est = 1 + (est - 1) * 1.5;     // boost counts ~1.5x toward load
+    return Math.min(1.2, Math.max(0, est));
+  }
+  return null;
+}
+
+function computePower() {
+  if (!num(v.rpm) || v.rpm < 400) return false;
+  var load = calcLoad();
+  if (!num(load)) return false;
+  var tq = peakTorqueNm(v.rpm) * load;          // Nm at this rpm/load
+  if (!num(tq) || tq < 0) return false;
+  var kw = tq * v.rpm * 2 * Math.PI / 60 / 1000;
+  power.nm = tq;
+  power.kw = kw;
+  power.hp = kw * 1.01387;                      // metric horsepower (PS)
+  power.stamp = Date.now();
+  pushHistory();
+  updatePeaks();
+  return true;
+}
+
+function pushHistory() {
+  var now = Date.now();
+  power.hist.push({ t: now, hp: power.hp, nm: power.nm });
+  var cutoff = now - CHART_WINDOW_S * 1000;
+  while (power.hist.length && power.hist[0].t < cutoff) power.hist.shift();
+  if (power.hist.length > 400) power.hist.splice(0, power.hist.length - 400);
+}
+
+function resetPeaks() {
+  power.peakHp = null; power.peakNm = null;
+  power.peakHpAt = 0; power.peakNmAt = 0;
+}
+
+function updatePeaks() {
+  var now = Date.now();
+  var ttl = gSettings.peakResetMs || PEAK_RESET_MS;
+  // rolling reset: peaks drop out ttl after they were set
+  if (num(power.peakHp) && now - power.peakHpAt > ttl) power.peakHp = null;
+  if (num(power.peakNm) && now - power.peakNmAt > ttl) power.peakNm = null;
+  if (!num(power.peakHp) || power.hp > power.peakHp) { power.peakHp = power.hp; power.peakHpAt = now; }
+  if (!num(power.peakNm) || power.nm > power.peakNm) { power.peakNm = power.nm; power.peakNmAt = now; }
 }
 
 /* ------------------------------------------------------------------ */
@@ -339,7 +617,7 @@ var gDmeCfg = null;   // config.dme from app.json (set in init)
 
 /* metric names in poll order (baro first: boost needs it) */
 var POLL_METRICS = ["iat", "egt", "oilPressAbs", "boost", "lambda",
-                    "mixtureAdapt", "knockRetard", "baro",
+                    "mixtureAdapt", "knockRetard", "baro", "loadDirect",
                     "gearbox", "voltage"];
 
 function metricList(metric) {
@@ -417,6 +695,27 @@ function pollOne() {
       nextCandidate(metric, cand);   // implausible: try the next candidate
     }
   });
+}
+
+/* Power/torque sampler: recompute and record a chart sample at a steady
+ * cadence independent of the DME poll rotation. Peaks also expire here so
+ * they reset even when values drop out (lift-off). */
+var gPowerTimer = null;
+
+function startPowerSampler() {
+  stopPowerSampler();
+  gPowerTimer = setInterval(function () {
+    computePower();
+    var now = Date.now();
+    var ttl = gSettings.peakResetMs || PEAK_RESET_MS;
+    if (num(power.peakHp) && now - power.peakHpAt > ttl) power.peakHp = null;
+    if (num(power.peakNm) && now - power.peakNmAt > ttl) power.peakNm = null;
+  }, 100);
+}
+
+function stopPowerSampler() {
+  if (gPowerTimer) clearInterval(gPowerTimer);
+  gPowerTimer = null;
 }
 
 function buildReadRequest(metric, cand) {
@@ -518,6 +817,10 @@ function demoStep() {
   set("gearbox", 78 + load * 25);
   afterStore("oilPressAbs", v.oilPressAbs);              // relative pressure
 
+  // power/torque for the Power tab: load % straight from the demo wave
+  set("loadDirect", load * 100);
+  computePower();
+
   // occasional knock event under load -> counter ticks (boost > 0.5 gate)
   var retard = (load > 0.7 && Math.sin(t * 1.7) > 0.97) ? -3.5 : 0;
   set("knockRetard", retard);
@@ -547,6 +850,7 @@ function loadSettings() {
   settingsStore.loadAll(function (s) {
     gSettings = s || {};
     startPolling();
+    startPowerSampler();
     startDemo();
   });
 }
@@ -570,13 +874,15 @@ function init(app) {
   loadSettings();
 
   os.onchange = function (screen) {
-    if (screen !== "MAIN") { stopPolling(); return; }
+    if (screen !== "MAIN") { stopPolling(); stopPowerSampler(); return; }
     var canvas = os.getScreen("MAIN").canvas;
     gCanvas = canvas;
     gW = canvas.width; gH = canvas.height;
     startPolling();
+    startPowerSampler();
     if (gTimer) clearInterval(gTimer);
-    gTimer = setInterval(render, REFRESH_MS);
+    // Power tab redraws faster so the chart looks real-time
+    gTimer = setInterval(render, gActiveTab === "power" ? POWER_REFRESH_MS : REFRESH_MS);
     render();
   };
 
@@ -591,6 +897,11 @@ function init(app) {
       var w = Math.floor(gW / TABS.length);
       var idx = Math.min(TABS.length - 1, Math.floor(x / w));
       gActiveTab = TABS[idx].id;
+      // Power tab runs at a faster redraw for the real-time chart
+      if (gTimer) {
+        clearInterval(gTimer);
+        gTimer = setInterval(render, gActiveTab === "power" ? POWER_REFRESH_MS : REFRESH_MS);
+      }
       render();
     }
   };
