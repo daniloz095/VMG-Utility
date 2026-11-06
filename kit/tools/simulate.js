@@ -375,7 +375,7 @@ function rasterize(svgPath, pngPath, cb) {
 /* ------------------------------------------------------------------ */
 
 runApp(8, function () {
-  var TAB_LABELS = ["main", "power", "gauge", "logs"];
+  var TAB_LABELS = ["main", "power", "lap", "gauge", "logs"];
   var wanted = tabFilter ? [tabFilter] : TAB_LABELS;
   var gW = SCREEN_W, gH = SCREEN_H;
   var queue = wanted.slice();
@@ -393,26 +393,56 @@ runApp(8, function () {
     // tap the tab strip exactly like on the head unit; touchhandler calls
     // render() synchronously, so record only that single frame
     var tabH = Math.round(gH * 0.09);
-    var w = Math.floor(gW / 4);
+    var w = Math.floor(gW / TAB_LABELS.length);
     recorder.ops.length = 0;
     recorder.recording = true;
     if (mocks.os.touchhandler) mocks.os.touchhandler(w * idx + w / 2, tabH / 2);
     recorder.recording = false;
 
-    (function () {
-      var ops = recorder.ops.slice();
-      recorder.ops.length = 0;
-      if (!ops.length) { results.push(tab + ": NO DRAW CALLS"); return next(); }
-      var svg = svgFromOps(ops);
-      var svgPath = path.join(outDir, tab + ".svg");
-      var pngPath = path.join(outDir, tab + ".png");
-      fs.writeFileSync(svgPath, svg);
-      rasterize(svgPath, pngPath, function (ok) {
-        results.push((ok ? "OK   " : "SVG  ") + (ok ? pngPath : svgPath) +
-                     "  (" + ops.length + " draw ops)");
-        next();
-      });
-    })();
+    // Lap tab: run a full simulated measurement - START at standstill, let
+    // the demo speed wave cross 100/200 km/h on the SIMULATED clock, then
+    // STOP and capture the results frame. (The app runs on a fake Date, so
+    // real setTimeout waiting would not advance its timers.)
+    if (tab === "lap") {
+      var btnX = null, btnY = null;
+      for (var oi = recorder.ops.length - 1; oi >= 0; oi--) {
+        var op = recorder.ops[oi];
+        if (op.op === "fillRoundRect" && op.h > 60 && op.h < 400 && op.w > 200) {
+          btnX = op.x + op.w / 2; btnY = op.y + op.h / 2; break;
+        }
+      }
+      if (btnX !== null && mocks.os.touchhandler) {
+        // rewind the demo wave so the speed is at standstill right now
+        gDemoRewind();
+        advance(300);                       // one render tick with speed ~0
+        lap.btnRect && mocks.os.touchhandler(btnX, btnY);   // START
+        var frames = Math.round(8 / 0.2);   // 8 simulated seconds of driving
+        for (var fi = 0; fi < frames; fi++) { simTick(); advance(200); }
+        mocks.os.touchhandler(btnX, btnY);  // STOP -> freeze results
+        recorder.ops.length = 0;
+        recorder.recording = true;
+        renderOnce();                       // redraw the results frame
+        recorder.recording = false;
+        emit(tab);
+        return;
+      }
+    }
+    emit(tab);
+  }
+
+  function emit(tab) {
+    var ops = recorder.ops.slice();
+    recorder.ops.length = 0;
+    if (!ops.length) { results.push(tab + ": NO DRAW CALLS"); return next(); }
+    var svg = svgFromOps(ops);
+    var svgPath = path.join(outDir, tab + ".svg");
+    var pngPath = path.join(outDir, tab + ".png");
+    fs.writeFileSync(svgPath, svg);
+    rasterize(svgPath, pngPath, function (ok) {
+      results.push((ok ? "OK   " : "SVG  ") + (ok ? pngPath : svgPath) +
+                   "  (" + ops.length + " draw ops)");
+      next();
+    });
   }
   next();
 });

@@ -30,10 +30,21 @@ var PEAK_RESET_MS = 6000;      // peak power/torque reset interval (setting late
 var CHART_WINDOW_S = 30;       // rolling window of the power/torque chart
 
 var TABS = [
-  { id: "main", label: "MAIN" },
+  { id: "main",  label: "MAIN" },
   { id: "power", label: "POWER" },
+  { id: "lap",   label: "LAP" },
   { id: "gauge", label: "BOOST GAUGE" },
-  { id: "logs", label: "LOGS" }
+  { id: "logs",  label: "LOGS" }
+];
+
+/* Lap tab: acceleration time targets (km/h) and the live side metrics */
+var LAP_TARGETS = [100, 200];
+var LAP_METRICS = [
+  { key: "boost",    label: "BOOST" },
+  { key: "fuelPres", label: "FUEL PRESS" },
+  { key: "iat",      label: "INTAKE" },
+  { key: "egt",      label: "EGT" },
+  { key: "speed",    label: "SPEED" }
 ];
 
 /* Tile labels. The M logo is drawn in the centre cell of the main grid, so
@@ -106,6 +117,20 @@ var power = {
   hist: []                          // [{t, hp, nm}] rolling window for the chart
 };
 
+/* Lap ("Замер") tab state.
+ * Running:   measuring; times fill in as the speed crosses each threshold.
+ * Done:      stopped via the toggle button; results frozen on screen.
+ * maxes:     peak value per side metric during the run. */
+var lap = {
+  state: "idle",           // idle | running | done
+  startedAt: 0,            // Date.now() at start
+  crossed: {},             // target km/h -> elapsed seconds (0-100, 0-200)
+  t100_200: null,          // derived: crossed[200] - crossed[100]
+  maxes: {},               // metric key -> max value seen during the run
+  curSpeed: 0,             // smoothed speed used for crossing detection
+  btnRect: null            // hit-test rect of the START/STOP button
+};
+
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -137,11 +162,21 @@ function markFresh(key) { v.stamp[key] = Date.now(); }
 function valueFor(key) {
   if (key === "boost") return currentBoost();
   if (key === "lambda") return currentLambda();
+  if (key === "speed") return lapSpeedKmh();
+  if (key === "fuelPres") return isFresh("fuelPressure") ? v.fuelPressure : null;
   // signal-fed values are push-based and always current while driving
   if (key === "coolant" || key === "oilTemp" || key === "rpm") {
     return num(v[key]) ? v[key] : null;
   }
   return isFresh(key) ? v[key] : null;
+}
+
+/* speed in km/h: the SOME/IP wheel-speed-derived signal is primary; when it
+ * is missing (e.g. simulator), fall back to OBD PID 0x0D from the DME poll */
+function lapSpeedKmh() {
+  if (num(v.speed)) return v.speed;
+  if (isFresh("speedObd")) return v.speedObd;
+  return null;
 }
 
 /* boost in bar: the DME poll gives absolute charge pressure (kPa), the
@@ -536,6 +571,183 @@ function drawSeries(ctx, hist, gx, gy, gw, gh, t0, now, key, maxVal, col) {
 }
 
 /* ------------------------------------------------------------------ */
+/* drawing: Lap tab (Замер)                                           */
+/* ------------------------------------------------------------------ */
+
+var COL_LAP = "#3aa0ff";        // lap accent (button / running state)
+var LAP_DP = 2;                 // seconds shown with two decimals
+
+function lapMetricVal(key) { return valueFor(key); }
+
+function lapTimeText(target) {
+  var t = lap.crossed[target];
+  if (num(t)) return t.toFixed(LAP_DP);
+  if (lap.state === "running") {
+    // live elapsed clock while the target has not been reached yet
+    return ((Date.now() - lap.startedAt) / 1000).toFixed(LAP_DP);
+  }
+  return "0.00";
+}
+
+/* One right-column entry: label line + big seconds line */
+function drawLapTime(ctx, x, y, w, h, label, valTxt, col) {
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.font = Math.round(h * 0.24) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  ctx.fillText(label, x, y);
+  ctx.font = "bold " + Math.round(h * 0.52) + "px sans-serif";
+  ctx.fillStyle(col || c("textPrimary"));
+  ctx.fillText(valTxt, x, y + h * 0.40);
+}
+
+function drawLap(ctx, top) {
+  var area = gH - top;
+  var padX = Math.round(gW * 0.03);
+  var sideW = Math.round(gW * 0.20);
+  var midX = padX + sideW + Math.round(gW * 0.03);
+  var midW = gW - 2 * (sideW + Math.round(gW * 0.03)) - padX;
+
+  // ---- centre: current speed ----
+  var spd = lapSpeedKmh();
+  var cy = top + Math.round(area * 0.30);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold " + Math.round(area * 0.30) + "px sans-serif";
+  ctx.fillStyle(lap.state === "running" ? c("accent") : c("textPrimary"));
+  ctx.fillText(num(spd) ? String(Math.round(spd)) : "--", midX + midW / 2, cy);
+  ctx.font = Math.round(area * 0.07) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  ctx.fillText("km/h", midX + midW / 2, cy + Math.round(area * 0.20));
+
+  // ---- bottom-centre: START/STOP toggle button ----
+  var btnW = Math.round(midW * 0.55);
+  var btnH = Math.round(area * 0.16);
+  var btnX = midX + Math.round((midW - btnW) / 2);
+  var btnY = top + area - btnH - Math.round(area * 0.06);
+  lap.btnRect = [btnX, btnY, btnW, btnH];
+
+  var running = lap.state === "running";
+  ctx.fillStyle(running ? c("alert") : c("success"));
+  ctx.fillRoundRect(btnX, btnY, btnW, btnH, 14);
+  ctx.font = "bold " + Math.round(btnH * 0.48) + "px sans-serif";
+  ctx.fillStyle("#ffffff");
+  ctx.fillText(running ? "STOP" : "START", btnX + btnW / 2, btnY + btnH / 2);
+
+  // status line above the button
+  ctx.font = Math.round(area * 0.055) + "px sans-serif";
+  ctx.fillStyle(c("textTertiary"));
+  var status = lap.state === "running"
+    ? "REC \u00b7 " + ((Date.now() - lap.startedAt) / 1000).toFixed(1) + " s"
+    : lap.state === "done" ? "RUN COMPLETE" : "SPEED MUST BE 0 TO START";
+  ctx.fillText(status, btnX + btnW / 2, btnY - Math.round(area * 0.05));
+
+  // ---- left column: live metrics (maxes after a finished run) ----
+  var rows = LAP_METRICS.length;
+  var colTop = top + Math.round(area * 0.04);
+  var rowH = Math.floor((area - (colTop - top) - Math.round(area * 0.26)) / rows);
+  for (var i = 0; i < rows; i++) {
+    var m = LAP_METRICS[i];
+    var y = colTop + i * rowH;
+    var showMax = lap.state === "done" && num(lap.maxes[m.key]);
+    var val = showMax ? lap.maxes[m.key] : lapMetricVal(m.key);
+    var dp = m.key === "boost" ? 2 : m.key === "fuelPres" ? 0 : 0;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.font = Math.round(rowH * 0.26) + "px sans-serif";
+    ctx.fillStyle(c("textSecondary"));
+    ctx.fillText((showMax ? "MAX " : "") + m.label, padX, y);
+    ctx.font = "bold " + Math.round(rowH * 0.44) + "px sans-serif";
+    ctx.fillStyle(showMax ? COL_LAP : (num(val) ? c("textPrimary") : c("textTertiary")));
+    ctx.fillText(num(val) ? val.toFixed(dp) : "--", padX, y + rowH * 0.36);
+  }
+
+  // ---- right column: acceleration times ----
+  var rx = midX + midW + Math.round(gW * 0.03);
+  var entries = [
+    { label: "0-100",    txt: lapTimeText(100),           got: num(lap.crossed[100]) },
+    { label: "0-200",    txt: lapTimeText(200),           got: num(lap.crossed[200]) },
+    { label: "100-200",  txt: num(lap.t100_200) ? lap.t100_200.toFixed(LAP_DP)
+                        : (lap.state === "running" && num(lap.crossed[100])
+                           ? ((Date.now() - lap.startedAt) / 1000 - lap.crossed[100]).toFixed(LAP_DP)
+                           : "0.00"),
+      got: num(lap.t100_200) }
+  ];
+  var eH = Math.floor((area - (colTop - top) - Math.round(area * 0.26)) / entries.length);
+  for (var j = 0; j < entries.length; j++) {
+    var e = entries[j];
+    drawLapTime(ctx, rx, colTop + j * eH, sideW, eH,
+      e.label, e.txt + " sec", e.got ? c("accent") : c("textPrimary"));
+  }
+}
+
+/* Lap engine: called from the render loop at UI cadence (~5 Hz).
+ * Speed crossing detection uses an EMA-smoothed signal and requires the
+ * previous sample to be under the threshold so a single noisy reading
+ * cannot trigger a time. Maxes are tracked only while running. */
+var gLapEma = null;
+
+function lapStep() {
+  var spd = lapSpeedKmh();
+  if (num(spd)) gLapEma = gLapEma === null ? spd : gLapEma + (spd - gLapEma) * 0.5;
+  lap.curSpeed = gLapEma;
+
+  if (lap.state !== "running") return;
+
+  var now = Date.now();
+  var el = (now - lap.startedAt) / 1000;
+  var s = num(gLapEma) ? gLapEma : 0;
+
+  // crossing detection for each target
+  for (var i = 0; i < LAP_TARGETS.length; i++) {
+    var tgt = LAP_TARGETS[i];
+    if (!num(lap.crossed[tgt]) && s >= tgt) {
+      lap.crossed[tgt] = el;
+      log.info("lap: crossed 0-" + tgt + " km/h in " + el.toFixed(2) + " s");
+    }
+  }
+  if (num(lap.crossed[100]) && num(lap.crossed[200])) {
+    lap.t100_200 = lap.crossed[200] - lap.crossed[100];
+  }
+
+  // track max values of the left-column metrics
+  for (var k = 0; k < LAP_METRICS.length; k++) {
+    var key = LAP_METRICS[k].key;
+    var val = lapMetricVal(key);
+    if (num(val) && (!num(lap.maxes[key]) || val > lap.maxes[key])) lap.maxes[key] = val;
+  }
+}
+
+function lapToggle() {
+  if (lap.state === "running") {
+    lap.state = "done";
+    log.info("lap stopped after " + ((Date.now() - lap.startedAt) / 1000).toFixed(2) + " s");
+    return;
+  }
+  if (lap.state === "done") { lapReset(); }   // second tap on results -> arm again
+  var spd = lapSpeedKmh();
+  if (!num(spd) || spd > 1) {
+    log.info("lap start rejected: speed", spd);
+    return;                       // per spec: measurement starts only at standstill
+  }
+  lap.state = "running";
+  lap.startedAt = Date.now();
+  lap.crossed = {};
+  lap.t100_200 = null;
+  lap.maxes = {};
+  gLapEma = 0;
+}
+
+function lapReset() {
+  lap.state = "idle";
+  lap.startedAt = 0;
+  lap.crossed = {};
+  lap.t100_200 = null;
+  lap.maxes = {};
+  gLapEma = null;
+}
+
+/* ------------------------------------------------------------------ */
 /* render loop                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -543,6 +755,7 @@ var gTimer = null;
 
 function render() {
   if (!gCanvas) return;
+  lapStep();   // speed crossing / max tracking runs at UI cadence
   var ctx = gCanvas.getContext("2d");
   ctx.fillStyle(c("background"));
   ctx.fillRect(0, 0, gW, gH);
@@ -550,6 +763,7 @@ function render() {
   var top = drawTabs(ctx);
   if (gActiveTab === "main") drawMain(ctx, top);
   else if (gActiveTab === "power") drawPower(ctx, top);
+  else if (gActiveTab === "lap") drawLap(ctx, top);
   else if (gActiveTab === "gauge") drawPlaceholder(ctx, top, "Boost gauge \u2014 next step");
   else drawPlaceholder(ctx, top, "Session logs \u2014 next step");
 }
@@ -708,7 +922,7 @@ var gDmeCfg = null;   // config.dme from app.json (set in init)
 /* metric names in poll order (baro first: boost needs it) */
 var POLL_METRICS = ["iat", "egt", "oilPressAbs", "boost", "lambda",
                     "mixtureAdapt", "knockRetard", "baro", "loadDirect",
-                    "gearbox", "voltage"];
+                    "gearbox", "voltage", "fuelPressure"];
 
 function metricList(metric) {
   var list = gDmeCfg[metric];
@@ -907,6 +1121,14 @@ function demoStep() {
   set("gearbox", 78 + load * 25);
   afterStore("oilPressAbs", v.oilPressAbs);              // relative pressure
 
+  // speed for the Lap tab: waves up to ~230 km/h so threshold crossings fire
+  var spd = Math.max(0, 230 * Math.sin(t * 0.16));
+  if (spd < 3) spd = 0;                                  // standstill phases
+  v.speed = spd;
+
+  // rail pressure for the Lap tab
+  set("fuelPressure", 40 + load * 250);
+
   // power/torque for the Power tab: load % straight from the demo wave
   set("loadDirect", load * 100);
   computePower();
@@ -987,12 +1209,21 @@ function init(app) {
       var w = Math.floor(gW / TABS.length);
       var idx = Math.min(TABS.length - 1, Math.floor(x / w));
       gActiveTab = TABS[idx].id;
-      // Power tab runs at a faster redraw for the real-time chart
+      // Power and Lap tabs run at a faster redraw (chart / stopwatch)
       if (gTimer) {
         clearInterval(gTimer);
         gTimer = setInterval(render, gActiveTab === "power" ? POWER_REFRESH_MS : REFRESH_MS);
       }
       render();
+      return;
+    }
+    // Lap tab: START/STOP toggle button hit-test (rect recorded by drawLap)
+    if (gActiveTab === "lap" && lap.btnRect) {
+      var r = lap.btnRect;
+      if (x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3]) {
+        lapToggle();
+        render();
+      }
     }
   };
 }
