@@ -8,16 +8,16 @@
 <text x="1200" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">BOOST GAUGE</text>
 <text x="1680" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">LOGS</text>
 <rect x="3" y="68" width="474" height="157" rx="10" fill="#14161a"/>
-<text x="16" y="95.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Boost</text>
+<text x="16" y="95.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">BOOST</text>
 <text x="16" y="173.7" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">0.01</text>
 <rect x="483" y="68" width="954" height="157" rx="10" fill="#14161a"/>
-<text x="496" y="95.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Mixture λ</text>
+<text x="496" y="95.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">MIXTURE</text>
 <text x="496" y="173.7" fill="#3fbf5a" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">0.99</text>
 <rect x="1443" y="68" width="474" height="157" rx="10" fill="#14161a"/>
-<text x="1456" y="95.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Oil press</text>
+<text x="1456" y="95.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">OIL PRESS</text>
 <text x="1456" y="173.7" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">--</text>
 <rect x="3" y="231" width="474" height="157" rx="10" fill="#14161a"/>
-<text x="16" y="258.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Intake temp</text>
+<text x="16" y="258.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">INTAKE</text>
 <text x="16" y="336.7" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">28</text>
 <rect x="483" y="231" width="954" height="157" rx="10" fill="#14161a"/>
 <path d="M1025.2 309.5 A65.2 65.2 0 1 1 894.8 309.5 A65.2 65.2 0 1 1 1025.2 309.5 " fill="#141414"/>
@@ -33,24 +33,24 @@
 <text x="960" y="252.7" fill="#e6e6e6" font-family="DejaVu Sans, Arial, sans-serif" font-size="9" font-weight="bold" text-anchor="middle">M</text>
 <text x="960" y="372.6" fill="#e6e6e6" font-family="DejaVu Sans, Arial, sans-serif" font-size="9" font-weight="bold" text-anchor="middle">M</text>
 <rect x="1443" y="231" width="474" height="157" rx="10" fill="#14161a"/>
-<text x="1456" y="258.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Exhaust temp</text>
+<text x="1456" y="258.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">EGT</text>
 <text x="1456" y="336.7" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">480</text>
 <rect x="3" y="394" width="474" height="157" rx="10" fill="#14161a"/>
-<text x="16" y="421.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Coolant</text>
+<text x="16" y="421.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">COOLANT</text>
 <text x="16" y="499.7" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">89</text>
 <rect x="483" y="394" width="954" height="157" rx="10" fill="#14161a"/>
-<text x="496" y="421.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Oil temp</text>
+<text x="496" y="421.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">OIL TEMP</text>
 <text x="496" y="499.7" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">95</text>
 <rect x="1443" y="394" width="474" height="157" rx="10" fill="#14161a"/>
-<text x="1456" y="421.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Gearbox</text>
+<text x="1456" y="421.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">GEARBOX</text>
 <text x="1456" y="499.7" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">78</text>
 <rect x="3" y="557" width="474" height="157" rx="10" fill="#14161a"/>
-<text x="16" y="584.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Battery</text>
+<text x="16" y="584.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">BATTERY</text>
 <text x="16" y="662.7" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">14.0</text>
 <rect x="483" y="557" width="954" height="157" rx="10" fill="#14161a"/>
-<text x="496" y="584.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Knock events</text>
+<text x="496" y="584.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">KNOCK</text>
 <text x="496" y="662.7" fill="#e8452c" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">1</text>
 <rect x="1443" y="557" width="474" height="157" rx="10" fill="#14161a"/>
-<text x="1456" y="584.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">Misfires</text>
+<text x="1456" y="584.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">MISFIRES</text>
 <text x="1456" y="662.7" fill="#e8452c" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">2</text>
 </svg>

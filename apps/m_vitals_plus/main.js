@@ -36,21 +36,26 @@ var TABS = [
   { id: "logs", label: "LOGS" }
 ];
 
+/* Tile labels. The M logo is drawn in the centre cell of the main grid, so
+ * every tile uses a short one-word label — long two-word labels (e.g.
+ * "Knock events") overflow their narrow side columns on 1920x720.
+ * Units are intentionally not rendered for now; they will become a
+ * user-facing setting later. */
 var PRIMARY_TILES = [
-  { key: "boost",    label: "Boost",        unit: "bar",  dp: 2 },
-  { key: "iat",      label: "Intake temp",  unit: "\u00b0C", dp: 0 },
-  { key: "egt",      label: "Exhaust temp", unit: "\u00b0C", dp: 0 },
-  { key: "oilPress", label: "Oil press",    unit: "bar",  dp: 1 },
-  { key: "lambda",   label: "Mixture \u03bb",  unit: "",   dp: 2 },
-  { key: "coolant",  label: "Coolant",      unit: "\u00b0C", dp: 0 },
-  { key: "oilTemp",  label: "Oil temp",     unit: "\u00b0C", dp: 0 }
+  { key: "boost",    label: "BOOST",     unit: "bar", dp: 2 },
+  { key: "iat",      label: "INTAKE",    unit: "\u00b0C", dp: 0 },
+  { key: "egt",      label: "EGT",       unit: "\u00b0C", dp: 0 },
+  { key: "oilPress", label: "OIL PRESS", unit: "bar", dp: 1 },
+  { key: "lambda",   label: "MIXTURE",   unit: "",    dp: 2 },
+  { key: "coolant",  label: "COOLANT",   unit: "\u00b0C", dp: 0 },
+  { key: "oilTemp",  label: "OIL TEMP",  unit: "\u00b0C", dp: 0 }
 ];
 
 var SECONDARY_TILES = [
-  { key: "voltage",  label: "Battery",      unit: "V",    dp: 1 },
-  { key: "gearbox",  label: "Gearbox",      unit: "\u00b0C", dp: 0 },
-  { key: "knock",    label: "Knock events", unit: "",     dp: 0, counter: true },
-  { key: "misfire",  label: "Misfires",     unit: "",     dp: 0, counter: true }
+  { key: "voltage",  label: "BATTERY",   unit: "V",  dp: 1 },
+  { key: "gearbox",  label: "GEARBOX",   unit: "\u00b0C", dp: 0 },
+  { key: "knock",    label: "KNOCK",     unit: "",   dp: 0, counter: true },
+  { key: "misfire",  label: "MISFIRES",  unit: "",   dp: 0, counter: true }
 ];
 
 /* Main-screen layout (VMG reference): 4 rows x 3 columns, the centre cell
@@ -106,7 +111,7 @@ var power = {
 /* ------------------------------------------------------------------ */
 
 var ALL_TILES = PRIMARY_TILES.concat(SECONDARY_TILES, [
-  { key: "rpm", label: "Engine rpm", unit: "", dp: 0 }
+  { key: "rpm", label: "RPM", unit: "", dp: 0 }
 ]);
 
 function num(x) { return typeof x === "number" && isFinite(x); }
