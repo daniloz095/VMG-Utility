@@ -37,6 +37,7 @@ var TABS = [
   { id: "ign",   label: "IGNITION" },
   { id: "fuelcool", label: "FUEL/COOL" },
   { id: "elec",  label: "ELECTRIC" },
+  { id: "tcase", label: "TCASE" },
   { id: "lap",   label: "LAP" }
 ];
 
@@ -134,6 +135,11 @@ var v = {
   fanDuty: null,             // cooling fan duty %, raw PWM figure
   aluIst: null,              // ALU_IST actual alternator load current, A
   aluTemp: null,             // regulator/alternator temperature, deg C
+  tcLockPct: null,           // xDrive transfer-case clutch lock-up, % (derived)
+  tcClutchRaw: null,         // raw clutch-current DID reading, mA (if present)
+  tcTemp: null,              // transfer-case oil temperature, deg C (probe)
+  slipRpm: null,             // front-vs-rear wheel speed difference, rpm
+  accLong: null,             // longitudinal acceleration estimate, m/s^2
   stamp: {}                  // key -> Date.now() of last good read
 };
 
@@ -141,6 +147,7 @@ var v = {
 // checked without the car. "auto" = on when no vehicle signals arrive.
 var gDemoTimer = null;
 var gDemoT = 0;
+var demoPrevSpeed = null;    // for the simulated acceleration estimate
 var gLastSignalMs = 0;
 
 var counters = { knock: 0, misfireCount: 0 };
@@ -200,6 +207,10 @@ var ignLive = {
   knockEvents: 0,           // knock events seen since app start (boost-gated)
   misEvents: 0              // misfire events seen since app start (boost-gated)
 };
+/* Live state for the TCASE tab ("Раздатка"): transfer-case lock-up %. */
+var tcaseLive = {
+  hist: []                  // [{t, lock}] rolling LIVE_WINDOW_S samples
+};
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
@@ -238,6 +249,7 @@ function valueFor(key) {
   if (key === "currentOut") return alternatorOutputA();
   if (key === "alternatorLoad") return alternatorLoadPct();
   if (key === "alternatorTemp") return alternatorTempC();
+  if (key === "tcLockPct") return tcaseLockPct();
   // signal-fed values are push-based and always current while driving
   if (key === "coolant" || key === "oilTemp" || key === "rpm") {
     return num(v[key]) ? v[key] : null;
@@ -322,6 +334,58 @@ function alternatorLoadPct() {
 
 function alternatorTempC() {
   return isFresh("aluTemp") ? v.aluTemp : null;
+}
+
+/* TCASE tab ("Раздатка"): xDrive transfer-case lock-up percentage.
+ * Primary source (to be probed on the car): a direct clutch-duty / system-
+ * torque DID from the transfer-case ECU — stored as tcClutchRaw. When it is
+ * not available we fall back to a physically-derived estimate of how much
+ * torque the multiplate clutch is currently sending to the front axle:
+ *     required clamping force ~ wheel-slip speed difference x longitudinal
+ *     acceleration, mapped through the engine torque at the current rpm and
+ *     normalised by the clutch maximum (config.tcase). The result is clamped
+ *     to 0..100 % and smoothed so the tile does not flicker. */
+function tcaseLockPct() {
+  if (isFresh("tcLockPct")) return v.tcLockPct;   // demo / direct feed
+  if (isFresh("tcClutchRaw")) {
+    var nom = (gConfig.tcase && num(gConfig.tcase.clutchMaxMa)) ? gConfig.tcase.clutchMaxMa : 2000;
+    var pct = Math.min(100, Math.max(0, v.tcClutchRaw / nom * 100));
+    return smoothLock(pct);
+  }
+  var slip = num(v.slipRpm) ? v.slipRpm : 0;      // front-vs-rear wheel diff
+  var acc = num(v.accLong) ? v.accLong : 0;       // longitudinal accel, m/s^2
+  var tq = num(power.nm) ? power.nm : 0;          // engine torque right now
+  if (!num(v.speed) || v.speed < 2 || tq <= 0) return smoothLock(0);
+  var cap = (gConfig.tcase && num(gConfig.tcase.lockCapPct)) ? gConfig.tcase.lockCapPct : 100;
+  // demand grows with slip and with drive torque; small deadband for noise
+  var demand = (Math.max(0, Math.abs(slip) - 15) * 0.9 + Math.max(0, acc) * 30) * (tq / 450);
+  return smoothLock(Math.min(cap, demand));
+}
+
+var gLockSmooth = null;
+function smoothLock(pct) {
+  if (!num(gLockSmooth)) { gLockSmooth = pct; return gLockSmooth; }
+  gLockSmooth += (pct - gLockSmooth) * 0.25;      // low-pass, ~0.4 s settling
+  return gLockSmooth;
+}
+
+/* longitudinal acceleration estimate: derivative of speed over time,
+ * refreshed at the sampler cadence while the vehicle is moving */
+var gAccState = { t: 0, spd: null };
+function updateAccEstimate() {
+  var spd = lapSpeedKmh();
+  var now = Date.now();
+  if (num(spd) && num(gAccState.spd) && now - gAccState.t > 80) {
+    var dt = (now - gAccState.t) / 1000;
+    var a = (spd - gAccState.spd) / 3.6 / dt;     // km/h -> m/s per second
+    v.accLong = Math.max(-12, Math.min(12, a));   // sanity clamp
+    markFresh("accLong");
+    gAccState.t = now;
+    gAccState.spd = spd;
+  } else if (num(spd) && gAccState.spd === null) {
+    gAccState.t = now;
+    gAccState.spd = spd;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -784,6 +848,10 @@ function liveStep() {
   if (num(rd) && rd < 0 && (!num(ignLive.maxRet) || Math.abs(rd) > Math.abs(ignLive.maxRet))) { ignLive.maxRet = rd; ignLive.maxRetAt = now; }
   if (num(ignLive.maxAdv) && now - ignLive.maxAdvAt > ttl) ignLive.maxAdv = null;
   if (num(ignLive.maxRet) && now - ignLive.maxRetAt > ttl) ignLive.maxRet = null;
+
+  // TCASE tab: rolling lock-up % history for the live chart
+  updateAccEstimate();
+  pushLive(tcaseLive.hist, { t: now, lock: tcaseLockPct() });
 }
 
 /* generic rolling live chart: hist entries {t, <keys>}; series keys can be
@@ -946,6 +1014,27 @@ function drawIgnTab(ctx, top) {
     [{ key: "adv", color: COL_ADV, label: "advance, deg", dp: 1 },
      { key: "ret", color: COL_RET, label: "retard, deg", dp: 1 }],
     { zeroFloor: false });
+}
+
+/* drawing: TCASE tab ("Раздатка") — lock-up % big number on top, live chart
+ * filling the rest of the screen. */
+function drawTcaseTab(ctx, top) {
+  var area = gH - top;
+  var statsH = Math.round(area * 0.30);
+  var padX = Math.round(gW * 0.03);
+  var cw = Math.floor((gW - 2 * padX) / 2);
+  var curLock = tcaseLockPct();
+  var sy = top + Math.round(statsH * 0.10);
+  drawLiveStat(ctx, padX, sy, cw, statsH, "LOCK-UP, %",
+    num(curLock) ? String(Math.round(curLock)) : "--", COL_LOCK, null);
+  // front/rear torque split hint: xDrive maps lock-up onto a 0..50% front share
+  var front = num(curLock) ? Math.round(50 * curLock / 100) : null;
+  drawLiveStat(ctx, padX + cw, sy, cw, statsH, "FRONT TORQUE SHARE, %",
+    num(front) ? String(front) : "--", c("textPrimary"), null);
+  drawLiveChart(ctx, padX, top + statsH, gW - 2 * padX, area - statsH,
+    "Transfer case lock-up, live", tcaseLive.hist,
+    [{ key: "lock", color: COL_LOCK, label: "lock-up, %", dp: 0 }],
+    { zeroFloor: true });
 }
 
 function lapTimeText(target) {
@@ -1167,6 +1256,7 @@ var COL_FUEL_ACT = "#3aa0ff";
 var COL_FUEL_REQ = "#f0a030";
 var COL_ADV = "#1aa05a";  // ignition advance
 var COL_RET = "#e8452c";  // knock retard
+var COL_LOCK = "#f0a030"; // transfer-case lock-up % (amber)
 
 function lapHistMax(key) {
   var m = null;
@@ -1400,6 +1490,7 @@ function render() {
   else if (gActiveTab === "ign") drawIgnTab(ctx, top);
   else if (gActiveTab === "fuelcool") drawFuelCoolTab(ctx, top);
   else if (gActiveTab === "elec") drawElecTab(ctx, top);
+  else if (gActiveTab === "tcase") drawTcaseTab(ctx, top);
   else if (gActiveTab === "lap") {
     if (gLapView === "detail" && lap.state === "done") drawLapDetails(ctx, top);
     else drawLap(ctx, top);
@@ -1410,7 +1501,7 @@ function render() {
 /* tabs that redraw at the fast (chart/stopwatch) cadence */
 function isFastTab() {
   return gActiveTab === "power" || gActiveTab === "hpfp" ||
-         gActiveTab === "ign" || gActiveTab === "lap";
+         gActiveTab === "ign" || gActiveTab === "lap" || gActiveTab === "tcase";
 }
 
 /* ------------------------------------------------------------------ */
@@ -1569,7 +1660,7 @@ var POLL_METRICS = ["iat", "egt", "oilPressAbs", "boost", "lambda",
                     "mixtureAdapt", "knockRetard", "baro", "loadDirect",
                     "gearbox", "voltage", "fuelPresAct", "fuelPresReq", "ignAdv",
                     "fuelTemp", "thermoPos", "fanRpm", "radTemp",
-                    "battCurrent", "aluIst", "aluTemp"];
+                    "battCurrent", "aluIst", "aluTemp", "tcClutchRaw"];
 
 /* metrics that are NOT polled from the DME (no trustworthy UDS source yet):
  * they stay null and render as "--" until wired up. */
@@ -1577,7 +1668,8 @@ var NO_SOURCE_METRICS = ["oilQuality", "oilLevel"];
 
 /* value keys that storeMetric stamps; derived getters use isFresh on these */
 var METRIC_VKEY = { fanRpm: "fanRpm", battCurrent: "battCurrent",
-                    aluIst: "aluIst", aluTemp: "aluTemp" };
+                    aluIst: "aluIst", aluTemp: "aluTemp",
+                    tcClutchRaw: "tcClutchRaw", tcTemp: "tcTemp" };
 
 function metricList(metric) {
   var list = gDmeCfg[metric];
@@ -1647,7 +1739,8 @@ function pollOne() {
       return;
     }
     var val = decode(res.data, cand); // rawHex -> scaled physical value
-    if (storeMetric(metric, val, cand)) {
+    var vkey = METRIC_VKEY[metric] || metric;   // tcClutchRaw etc. store under a mapped key
+    if (storeMetric(vkey, val, cand)) {
       gResolved[metric] = cand;
       afterStore(metric, val);
       if (metric === "fanRpm" && cand && cand.duty) v.fanDuty = val;
@@ -1802,6 +1895,15 @@ function demoStep() {
   set("battCurrent", ibs);
   set("aluIst", 25 + load * 100 + 6 * Math.sin(t * 0.9));
   set("aluTemp", 62 + load * 38);
+
+  // TCASE tab: lock-up % rises with slip and acceleration demand; simulate a
+  // small front-vs-rear wheel speed difference during hard pull phases
+  var acc = Math.max(0, (v.speed - (demoPrevSpeed || v.speed)) / 0.35 / 3.6);
+  demoPrevSpeed = v.speed;
+  set("slipRpm", load > 0.75 ? (load - 0.75) * 260 : 0);
+  set("accLong", Math.min(9, acc));
+  var lockDemand = Math.min(100, Math.max(0, v.slipRpm) * 0.55 + acc * 14);
+  set("tcLockPct", lockDemand);
 
   // ignition advance / knock retard for the ignition detail chart
   set("ignAdv", num(v.rpm) && v.rpm > 700 ? 8 + load * 22 - Math.abs(retardDemo()) : 8);
