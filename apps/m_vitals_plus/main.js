@@ -96,6 +96,9 @@ var v = {
   oilTemp: null, gearbox: null, voltage: null, mixtureAdapt: null,
   baro: null,                // ambient pressure, kPa (boost = charge - baro)
   knockRetard: null,
+  fuelPresAct: null,         // HPFP rail pressure actual, bar
+  fuelPresReq: null,         // HPFP rail pressure requested, bar
+  ignAdv: null,              // ignition advance, deg CA (ZWSPAEKT)
   stamp: {}                  // key -> Date.now() of last good read
 };
 
@@ -128,8 +131,24 @@ var lap = {
   t100_200: null,          // derived: crossed[200] - crossed[100]
   maxes: {},               // metric key -> max value seen during the run
   curSpeed: 0,             // smoothed speed used for crossing detection
-  btnRect: null            // hit-test rect of the START/STOP button
+  btnRect: null,           // hit-test rect of the START/STOP button
+  detailsBtnRect: null,    // hit-test rect of the DETAILS button
+  hist: [],                // [{t, el, hp, nm, fuelAct, fuelReq, ignAdv, retard}] chart samples
+  peakHp: null, peakNm: null,   // power/torque peaks recorded during the run
+  knockBase: 0,            // session knock counter when the run started
+  misBase: 0               // session misfire counter when the run started
 };
+
+/* Second-level tabs opened from the LAP screen via the DETAILS button.
+ * Shown only after a finished run (lap.state === "done"). */
+var DETAIL_TABS = [
+  { id: "power", label: "POWER" },
+  { id: "hpfp",  label: "HPFP" },
+  { id: "ign",   label: "IGNITION" }
+];
+var gDetailTab = "power";   // active second-level tab
+var gLapView = "main";      // main | detail — which LAP view is on screen
+var gBackBtnRect = null;    // hit-test rect of the < BACK button
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
@@ -163,12 +182,28 @@ function valueFor(key) {
   if (key === "boost") return currentBoost();
   if (key === "lambda") return currentLambda();
   if (key === "speed") return lapSpeedKmh();
-  if (key === "fuelPres") return isFresh("fuelPressure") ? v.fuelPressure : null;
+  if (key === "fuelPres") return fuelPressureActual();
+  if (key === "fuelPresReq") return fuelPressureRequested();
   // signal-fed values are push-based and always current while driving
   if (key === "coolant" || key === "oilTemp" || key === "rpm") {
     return num(v[key]) ? v[key] : null;
   }
   return isFresh(key) ? v[key] : null;
+}
+
+/* HPFP rail pressure: actual and requested, bar. The DME poll fills the
+ * *_IST / *_SOLL candidates; when only one legacy figure exists both
+ * getters fall back to it so the chart still draws something useful. */
+function fuelPressureActual() {
+  if (isFresh("fuelPresAct")) return v.fuelPresAct;
+  if (isFresh("fuelPressure")) return v.fuelPressure;
+  return null;
+}
+
+function fuelPressureRequested() {
+  if (isFresh("fuelPresReq")) return v.fuelPresReq;
+  if (isFresh("fuelPressure")) return v.fuelPressure;
+  return null;
 }
 
 /* speed in km/h: the SOME/IP wheel-speed-derived signal is primary; when it
@@ -620,10 +655,12 @@ function drawLap(ctx, top) {
   ctx.fillStyle(c("textSecondary"));
   ctx.fillText("km/h", midX + midW / 2, cy + Math.round(area * 0.20));
 
-  // ---- bottom-centre: START/STOP toggle button ----
-  var btnW = Math.round(midW * 0.55);
+  // ---- bottom-centre: START/STOP toggle + DETAILS buttons ----
+  var btnW = Math.round(midW * 0.42);
   var btnH = Math.round(area * 0.16);
-  var btnX = midX + Math.round((midW - btnW) / 2);
+  var gap = Math.round(midW * 0.04);
+  var pairW = num(lap.maxes.speed) || lap.state === "done" ? btnW * 2 + gap : btnW;
+  var btnX = midX + Math.round((midW - pairW) / 2);
   var btnY = top + area - btnH - Math.round(area * 0.06);
   lap.btnRect = [btnX, btnY, btnW, btnH];
 
@@ -633,6 +670,23 @@ function drawLap(ctx, top) {
   ctx.font = "bold " + Math.round(btnH * 0.48) + "px sans-serif";
   ctx.fillStyle("#ffffff");
   ctx.fillText(running ? "STOP" : "START", btnX + btnW / 2, btnY + btnH / 2);
+
+  // DETAILS button: appears once a run has been recorded
+  lap.detailsBtnRect = null;
+  if (lap.state === "done") {
+    var dx = btnX + btnW + gap;
+    ctx.fillStyle(c("surface"));
+    ctx.fillRoundRect(dx, btnY, btnW, btnH, 14);
+    ctx.strokeStyle(c("accent"));
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(dx + 7, btnY + 7); ctx.lineTo(dx + btnW - 7, btnY + 7);
+    ctx.lineTo(dx + btnW - 7, btnY + btnH - 7); ctx.lineTo(dx + 7, btnY + btnH - 7);
+    ctx.closePath(); ctx.stroke();
+    ctx.fillStyle(c("accent"));
+    ctx.fillText("DETAILS", dx + btnW / 2, btnY + btnH / 2);
+    lap.detailsBtnRect = [dx, btnY, btnW, btnH];
+  }
 
   // status line above the button
   ctx.font = Math.round(area * 0.055) + "px sans-serif";
@@ -716,6 +770,20 @@ function lapStep() {
     var val = lapMetricVal(key);
     if (num(val) && (!num(lap.maxes[key]) || val > lap.maxes[key])) lap.maxes[key] = val;
   }
+
+  // record chart samples + power peaks for the DETAILS screens
+  lap.hist.push({
+    t: now, el: el,
+    hp: num(power.hp) ? power.hp : null,
+    nm: num(power.nm) ? power.nm : null,
+    fuelAct: fuelPressureActual(),
+    fuelReq: fuelPressureRequested(),
+    ignAdv: isFresh("ignAdv") ? v.ignAdv : null,
+    retard: isFresh("knockRetard") ? v.knockRetard : null
+  });
+  if (lap.hist.length > 900) lap.hist.splice(0, lap.hist.length - 900);
+  if (num(power.hp) && (!num(lap.peakHp) || power.hp > lap.peakHp)) lap.peakHp = power.hp;
+  if (num(power.nm) && (!num(lap.peakNm) || power.nm > lap.peakNm)) lap.peakNm = power.nm;
 }
 
 function lapToggle() {
@@ -735,6 +803,11 @@ function lapToggle() {
   lap.crossed = {};
   lap.t100_200 = null;
   lap.maxes = {};
+  lap.hist = [];
+  lap.peakHp = null;
+  lap.peakNm = null;
+  lap.knockBase = counters.knock;        // per-run event deltas
+  lap.misBase = counters.misfireCount;
   gLapEma = 0;
 }
 
@@ -744,7 +817,233 @@ function lapReset() {
   lap.crossed = {};
   lap.t100_200 = null;
   lap.maxes = {};
+  lap.hist = [];
+  lap.peakHp = null;
+  lap.peakNm = null;
   gLapEma = null;
+}
+
+/* ------------------------------------------------------------------ */
+/* drawing: Lap DETAILS (second-level tabs)                            */
+/* ------------------------------------------------------------------ */
+
+var COL_HP = "#e8452c";   // power series on detail charts
+var COL_NM = "#3aa0ff";   // torque series
+var COL_FUEL_ACT = "#3aa0ff";
+var COL_FUEL_REQ = "#f0a030";
+var COL_ADV = "#1aa05a";  // ignition advance
+var COL_RET = "#e8452c";  // knock retard
+
+function lapHistMax(key) {
+  var m = null;
+  for (var i = 0; i < lap.hist.length; i++) {
+    var val = lap.hist[i][key];
+    if (num(val) && (m === null || val > m)) m = val;
+  }
+  return m;
+}
+
+function lapHistMin(key) {
+  var m = null;
+  for (var i = 0; i < lap.hist.length; i++) {
+    var val = lap.hist[i][key];
+    if (num(val) && (m === null || val < m)) m = val;
+  }
+  return m;
+}
+
+/* Big number block: label + value, used in the stats rows of detail tabs */
+function drawStat(ctx, x, y, w, h, label, valTxt, col) {
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.font = Math.round(h * 0.26) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  ctx.fillText(label, x, y);
+  ctx.font = "bold " + Math.round(h * 0.55) + "px sans-serif";
+  ctx.fillStyle(col || c("textPrimary"));
+  ctx.fillText(valTxt, x, y + h * 0.34);
+}
+
+/* Second-level tab strip under the main tabs; returns its height */
+function drawDetailTabs(ctx, top) {
+  var th = Math.round(gH * 0.075);
+  var w = Math.floor(gW / DETAIL_TABS.length);
+  ctx.fillStyle(c("surface"));
+  ctx.fillRect(0, top, gW, th);
+  for (var i = 0; i < DETAIL_TABS.length; i++) {
+    var t = DETAIL_TABS[i];
+    var x = i * w;
+    var active = t.id === gDetailTab;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = (active ? "bold " : "") + Math.round(th * 0.42) + "px sans-serif";
+    ctx.fillStyle(active ? c("accent") : c("textSecondary"));
+    ctx.fillText(t.label, x + w / 2, top + th * 0.45);
+    if (active) {
+      ctx.fillStyle(c("accent"));
+      ctx.fillRect(x + w * 0.2, top + th - 3, w * 0.6, 3);
+    }
+  }
+  // BACK button at the right edge of the strip
+  var bw = Math.round(gW * 0.10);
+  ctx.fillStyle(c("background"));
+  ctx.fillRoundRect(gW - bw - 8, top + 6, bw, th - 12, 8);
+  ctx.font = "bold " + Math.round(th * 0.38) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  gBackBtnRect = [gW - bw - 8, top + 6, bw, th - 12];
+  ctx.fillText("< BACK", gW - bw - 8 + bw / 2, top + th / 2);
+  return th;
+}
+
+/* Generic time-series chart over the recorded lap history. The x axis is
+ * elapsed seconds of the run; series = [{key, color, label}]. */
+function drawLapChart(ctx, x, y, w, h, title, series, opts) {
+  opts = opts || {};
+  ctx.fillStyle(c("surface"));
+  ctx.fillRoundRect(x + 4, y + 4, w - 8, h - 8, 12);
+
+  var padL = Math.round(w * 0.07);
+  var padR = Math.round(w * (opts.rightAxis ? 0.07 : 0.03));
+  var padT = Math.round(h * 0.16);
+  var padB = Math.round(h * 0.12);
+  var gx = x + padL, gy = y + padT;
+  var gw = w - padL - padR, gh = h - padT - padB;
+
+  // x extent: total recorded elapsed time (min 5 s so short runs stay sane)
+  var tEnd = 5;
+  for (var i = 0; i < lap.hist.length; i++) {
+    if (lap.hist[i].el > tEnd) tEnd = lap.hist[i].el;
+  }
+  tEnd = Math.ceil(tEnd);
+
+  // shared scale across all series unless per-axis given
+  var lo = opts.zeroBase ? 0 : null, hi = null;
+  for (var s = 0; s < series.length; s++) {
+    var key = series[s].key;
+    for (var j = 0; j < lap.hist.length; j++) {
+      var val = lap.hist[j][key];
+      if (!num(val)) continue;
+      if (lo === null || val < lo) lo = val;
+      if (hi === null || val > hi) hi = val;
+    }
+  }
+  if (lo === null) { lo = 0; hi = 1; }
+  if (hi === lo) hi = lo + 1;
+  var span = hi - lo;
+  lo -= span * 0.05; hi += span * 0.05;
+  if (opts.zeroBase && lo < 0 && Math.abs(lo) < span * 0.2) lo = 0;
+
+  // grid lines + left labels
+  ctx.strokeStyle(c("divider") || c("textTertiary"));
+  ctx.lineWidth = 1;
+  ctx.textBaseline = "middle";
+  ctx.font = Math.round(h * 0.075) + "px sans-serif";
+  for (var g = 0; g <= 4; g++) {
+    var yy = gy + gh - gh * g / 4;
+    ctx.beginPath(); ctx.moveTo(gx, yy); ctx.lineTo(gx + gw, yy); ctx.stroke();
+    ctx.textAlign = "right";
+    ctx.fillStyle(c("textTertiary"));
+    ctx.fillText((lo + (hi - lo) * g / 4).toFixed(series[0].dp), gx - 6, yy);
+  }
+  // time ticks every ~5 s
+  ctx.textAlign = "center";
+  var tickStep = tEnd > 40 ? 10 : 5;
+  for (var ts = 0; ts <= tEnd; ts += tickStep) {
+    var tx = gx + gw * ts / tEnd;
+    ctx.fillText(ts + "s", tx, gy + gh + padB * 0.55);
+  }
+
+  // title inside the panel
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.font = Math.round(h * 0.08) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  ctx.fillText(title, gx, y + Math.round(h * 0.045));
+
+  // legend to the right of the title
+  var lx = gx + ctx.measureText(title).width + Math.round(w * 0.03);
+  ctx.font = Math.round(h * 0.075) + "px sans-serif";
+  for (var ls = 0; ls < series.length; ls++) {
+    var sr = series[ls];
+    ctx.fillStyle(sr.color);
+    ctx.fillRect(lx, y + Math.round(h * 0.05), Math.round(w * 0.025), 4);
+    ctx.textBaseline = "middle";
+    ctx.fillText(sr.label, lx + Math.round(w * 0.032), y + Math.round(h * 0.062));
+    lx += Math.round(w * 0.032) + ctx.measureText(sr.label).width + Math.round(w * 0.03);
+    ctx.textBaseline = "top";
+  }
+
+  // series lines
+  for (var ss = 0; ss < series.length; ss++) {
+    var se = series[ss];
+    ctx.strokeStyle(se.color);
+    ctx.lineWidth = se.dashed ? 2 : 3;
+    ctx.beginPath();
+    var started = false;
+    for (var p = 0; p < lap.hist.length; p++) {
+      var pt = lap.hist[p];
+      var pv = pt[se.key];
+      if (!num(pv)) { started = false; continue; }
+      var px = gx + gw * pt.el / tEnd;
+      var py = gy + gh - gh * (pv - lo) / (hi - lo);
+      if (!started) { ctx.moveTo(px, py); started = true; }
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+}
+
+/* Details view dispatcher */
+function drawLapDetails(ctx, top) {
+  var dTop = top + drawDetailTabs(ctx, top);
+  var area = gH - dTop;
+  var statsH = Math.round(area * 0.26);
+  var padX = Math.round(gW * 0.03);
+
+  if (gDetailTab === "power") {
+    var nCols = 2;
+    var cw = Math.floor((gW - 2 * padX) / nCols);
+    drawStat(ctx, padX, dTop + Math.round(statsH * 0.15), cw, statsH,
+      "PEAK POWER, hp", num(lap.peakHp) ? String(Math.round(lap.peakHp)) : "--", COL_HP);
+    drawStat(ctx, padX + cw, dTop + Math.round(statsH * 0.15), cw, statsH,
+      "PEAK TORQUE, Nm", num(lap.peakNm) ? String(Math.round(lap.peakNm)) : "--", COL_NM);
+    drawLapChart(ctx, padX, dTop + statsH, gW - 2 * padX, area - statsH,
+      "Power & Torque during run",
+      [{ key: "hp", color: COL_HP, label: "hp", dp: 0 },
+       { key: "nm", color: COL_NM, label: "Nm", dp: 0 }]);
+  } else if (gDetailTab === "hpfp") {
+    var aMax = lapHistMax("fuelAct"), rMax = lapHistMax("fuelReq");
+    var cw2 = Math.floor((gW - 2 * padX) / 2);
+    drawStat(ctx, padX, dTop + Math.round(statsH * 0.15), cw2, statsH,
+      "MAX RAIL ACTUAL, bar", num(aMax) ? String(Math.round(aMax)) : "--", COL_FUEL_ACT);
+    drawStat(ctx, padX + cw2, dTop + Math.round(statsH * 0.15), cw2, statsH,
+      "MAX RAIL REQUESTED, bar", num(rMax) ? String(Math.round(rMax)) : "--", COL_FUEL_REQ);
+    drawLapChart(ctx, padX, dTop + statsH, gW - 2 * padX, area - statsH,
+      "HPFP rail pressure",
+      [{ key: "fuelAct", color: COL_FUEL_ACT, label: "actual", dp: 0 },
+       { key: "fuelReq", color: COL_FUEL_REQ, label: "requested", dp: 0, dashed: true }]);
+  } else { // ign
+    var advMax = lapHistMax("ignAdv");
+    var retMin = lapHistMin("retard");
+    // knock/misfire events accumulated during this run only (counters are
+    // session-wide; we snapshot the baseline when the run starts)
+    var knockRun = Math.max(0, counters.knock - lap.knockBase);
+    var misRun = Math.max(0, counters.misfireCount - lap.misBase);
+    var cw3 = Math.floor((gW - 2 * padX) / 4);
+    drawStat(ctx, padX, dTop + Math.round(statsH * 0.15), cw3, statsH,
+      "MAX ADVANCE, deg", num(advMax) ? advMax.toFixed(1) : "--", COL_ADV);
+    drawStat(ctx, padX + cw3, dTop + Math.round(statsH * 0.15), cw3, statsH,
+      "MAX RETARD, deg", num(retMin) ? Math.abs(retMin).toFixed(1) : "--", COL_RET);
+    drawStat(ctx, padX + cw3 * 2, dTop + Math.round(statsH * 0.15), cw3, statsH,
+      "KNOCK EVENTS", String(knockRun), knockRun > 0 ? c("alert") : c("textPrimary"));
+    drawStat(ctx, padX + cw3 * 3, dTop + Math.round(statsH * 0.15), cw3, statsH,
+      "MISFIRES LOAD", String(misRun), misRun > 0 ? c("alert") : c("textPrimary"));
+    drawLapChart(ctx, padX, dTop + statsH, gW - 2 * padX, area - statsH,
+      "Ignition timing under load",
+      [{ key: "ignAdv", color: COL_ADV, label: "advance, deg", dp: 1 },
+       { key: "retard", color: COL_RET, label: "knock retard, deg", dp: 1 }],
+      { zeroBase: false });
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -763,7 +1062,10 @@ function render() {
   var top = drawTabs(ctx);
   if (gActiveTab === "main") drawMain(ctx, top);
   else if (gActiveTab === "power") drawPower(ctx, top);
-  else if (gActiveTab === "lap") drawLap(ctx, top);
+  else if (gActiveTab === "lap") {
+    if (gLapView === "detail" && lap.state === "done") drawLapDetails(ctx, top);
+    else drawLap(ctx, top);
+  }
   else if (gActiveTab === "gauge") drawPlaceholder(ctx, top, "Boost gauge \u2014 next step");
   else drawPlaceholder(ctx, top, "Session logs \u2014 next step");
 }
@@ -922,7 +1224,7 @@ var gDmeCfg = null;   // config.dme from app.json (set in init)
 /* metric names in poll order (baro first: boost needs it) */
 var POLL_METRICS = ["iat", "egt", "oilPressAbs", "boost", "lambda",
                     "mixtureAdapt", "knockRetard", "baro", "loadDirect",
-                    "gearbox", "voltage", "fuelPressure"];
+                    "gearbox", "voltage", "fuelPresAct", "fuelPresReq", "ignAdv"];
 
 function metricList(metric) {
   var list = gDmeCfg[metric];
@@ -1126,20 +1428,30 @@ function demoStep() {
   if (spd < 3) spd = 0;                                  // standstill phases
   v.speed = spd;
 
-  // rail pressure for the Lap tab
-  set("fuelPressure", 40 + load * 250);
+  // HPFP rail pressure actual/requested for the lap detail charts
+  set("fuelPresReq", 40 + load * 250);
+  set("fuelPresAct", 38 + load * 246 + 4 * Math.sin(t * 3.1));
+
+  // ignition advance / knock retard for the ignition detail chart
+  set("ignAdv", num(v.rpm) && v.rpm > 700 ? 8 + load * 22 - Math.abs(retardDemo()) : 8);
 
   // power/torque for the Power tab: load % straight from the demo wave
   set("loadDirect", load * 100);
   computePower();
 
   // occasional knock event under load -> counter ticks (boost > 0.5 gate)
-  var retard = (load > 0.7 && Math.sin(t * 1.7) > 0.97) ? -3.5 : 0;
+  var retard = retardDemo();
   set("knockRetard", retard);
   handleKnock(retard);
 
   // occasional misfire burst under load
   if (load > 0.6 && Math.sin(t * 2.9) > 0.985) counters.misfireCount++;
+}
+
+/* demo knock retard: brief negative spikes while heavily loaded */
+function retardDemo() {
+  var load = Math.max(0, Math.sin(gDemoT * 0.4));
+  return (load > 0.7 && Math.sin(gDemoT * 1.7) > 0.97) ? -3.5 : 0;
 }
 
 function startDemo() {
@@ -1209,6 +1521,9 @@ function init(app) {
       var w = Math.floor(gW / TABS.length);
       var idx = Math.min(TABS.length - 1, Math.floor(x / w));
       gActiveTab = TABS[idx].id;
+      // leaving/re-entering the lap screen: top tabs always show the main view
+      if (gActiveTab !== "lap") gLapView = "main";
+      else if (lap.state !== "done") gLapView = "main";
       // Power and Lap tabs run at a faster redraw (chart / stopwatch)
       if (gTimer) {
         clearInterval(gTimer);
@@ -1217,15 +1532,53 @@ function init(app) {
       render();
       return;
     }
-    // Lap tab: START/STOP toggle button hit-test (rect recorded by drawLap)
-    if (gActiveTab === "lap" && lap.btnRect) {
+    // Lap detail view: second-level tab strip + BACK button
+    if (gActiveTab === "lap" && gLapView === "detail") {
+      var dTop = tabH;
+      var dTh = Math.round(gH * 0.075);
+      if (y >= dTop && y <= dTop + dTh) {
+        if (gBackBtnRect && x >= gBackBtnRect[0] && x <= gBackBtnRect[0] + gBackBtnRect[2] &&
+            y >= gBackBtnRect[1] && y <= gBackBtnRect[1] + gBackBtnRect[3]) {
+          gLapView = "main";
+          render();
+          return;
+        }
+        var dw = Math.floor(gW / DETAIL_TABS.length);
+        var di = Math.min(DETAIL_TABS.length - 1, Math.floor(x / dw));
+        gDetailTab = DETAIL_TABS[di].id;
+        render();
+        return;
+      }
+      return;   // rest of the detail screen is not interactive
+    }
+    // Lap tab: START/STOP toggle + DETAILS button hit-test (rects from drawLap)
+    if (gActiveTab === "lap") {
       var r = lap.btnRect;
-      if (x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3]) {
+      if (r && x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3]) {
         lapToggle();
+        render();
+        return;
+      }
+      var d = lap.detailsBtnRect;
+      if (d && x >= d[0] && x <= d[0] + d[2] && y >= d[1] && y <= d[1] + d[3]) {
+        gLapView = "detail";
         render();
       }
     }
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* test hooks (used by kit/tools/simulate.js; harmless on the car)    */
+/* ------------------------------------------------------------------ */
+
+exports._sim = {
+  lap: lap,
+  counters: counters,
+  render: render,
+  touch: function () { return os.touchhandler; },
+  setDetailTab: function (id) { gLapView = "detail"; gDetailTab = id; },
+  setMainTab: function (id) { gActiveTab = id; gLapView = "main"; }
+};
 
 exports.init = init;

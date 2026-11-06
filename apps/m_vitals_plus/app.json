@@ -121,11 +121,23 @@
           "note": "OBD PID 0x63 engine load %, raw/255*100" }
       ],
       "misfire": { "tid": "0C", "note": "OBD service 06, MIDs A2.. = cylinders 1..; tid 0C = this driving cycle (0B = average of the last 10). Set to {} to switch off." },
-      "fuelPressure": [
+      "fuelPresAct": [
         { "did": "4185", "bytes": 2, "at": 0, "factor": 0.001, "offset": 0, "min": 20, "max": 400,
-          "note": "DRUCKRAIL_SOLL/IST Hochdruckkraftstoffpumpe rail pressure, hPa -> bar (direct injection, typical 30-300 bar)" },
+          "note": "DRUCKRAIL_IST Hochdruckkraftstoffpumpe rail pressure actual, hPa -> bar" },
         { "did": "F47D", "bytes": 2, "at": 0, "factor": 0.00025, "offset": 0, "min": 20, "max": 400,
-          "note": "OBD PID 0x7D rail pressure A absolute, kPa units raw*655.36 stored big-endian -> bar" }
+          "note": "OBD PID 0x7D common rail pressure A absolute, kPa units raw*655.36 stored big-endian -> bar" }
+      ],
+      "fuelPresReq": [
+        { "did": "4184", "bytes": 2, "at": 0, "factor": 0.001, "offset": 0, "min": 20, "max": 400,
+          "note": "DRUCKRAIL_SOLL requested rail pressure, hPa -> bar (candidate; verify on car)" },
+        { "did": "4439", "bytes": 2, "at": 0, "factor": 0.001, "offset": 0, "min": 20, "max": 400,
+          "note": "alternative SOLL DID candidate" }
+      ],
+      "ignAdv": [
+        { "did": "554B", "bytes": 1, "at": 0, "signed": true, "factor": 0.375, "offset": 0, "min": -40, "max": 45,
+          "note": "ZWSPAEKT Zundwinkel-Zuspatabstand instant ignition advance, deg CA (half-quantised like 554C)" },
+        { "obd": "0E", "bytes": 1, "at": 0, "factor": 0.5, "offset": -128, "min": -40, "max": 45,
+          "note": "OBD PID 0x0E timing advance bank 1, (A/2)-128 deg" }
       ],
       "gearbox": [
         { "ecu": 24, "did": "6000", "bytes": 1, "at": 0, "factor": 1, "offset": -40, "min": -40, "max": 160,

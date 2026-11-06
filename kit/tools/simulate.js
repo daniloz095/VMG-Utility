@@ -160,7 +160,16 @@ var mocks = {
   signals: { subscribe: function (n, cb) { gSimSignalCb = cb; } },
   settings: { loadAll: function (cb) { cb({ demo: "on" }); } },
   diagnostic: {
-    readData: function (ecu, ids, cb) { cb(null); },     // no car: demo fills in
+    // UDS DID reads are answered with plausible values keyed by the DID hex,
+    // so the app's real decode/store pipeline runs in the simulation too.
+    readData: function (ecu, ids, cb) {
+      var id = ids && ids[0] ? ids[0].id : null;
+      if (id === null || !SIM_DIDS.hasOwnProperty(id)) { cb(null); return; }   // demo mode fills these
+      var vhex = SIM_DIDS[id];
+      if (typeof vhex === "function") vhex = vhex();
+      if (vhex === null) { cb(null); return; }        // simulate "not available"
+      cb({ data: vhex });
+    },
     testOBD: function (req, cb) { cb(null); }
   },
   log: {
@@ -169,6 +178,30 @@ var mocks = {
     }
   }
 };
+
+/* simulated DME responses: did -> raw big-endian hex (or fn() per poll).
+ * Scales mirror the FIRST app.json candidate of each metric so decode()
+ * lands on sane values; metrics without an entry fall back to demo mode. */
+function simWave(frac) { return Math.max(0, Math.sin(gSimNow / 1000 * frac)); }
+var SIM_DIDS = {
+  0x580F: function () { return hex8(Math.round((28 + 22 * simWave(0.4) + 48) / 0.75)); },       // IAT degC
+  0x5896: function () { return hex16(Math.round((480 + 430 * simWave(0.4) + 273.14) * 10)); },   // EGT
+  0x586F: function () { return hex16(Math.round((1.0 + 4.6 * simWave(0.4) + 10.0) * 1000)); },   // oil press abs hPa->bar
+  0x4205: function () { return hex16(Math.round((101 + 135 * simWave(0.4)) * 128)); },            // charge pressure kPa->hPa*128
+  0x4201: function () { return hex16(Math.round(100.5 * 256)); },                                  // baro kPa -> raw*1/256 hPa
+  0x5889: function () { return hex16(Math.round((0.99 + 0.07 * simWave(0.4)) / 0.000244140625)); },// lambda
+  0x4A9D: function () { return hex16(Math.round(1.0 / 3.0517578e-05)); },                          // mixture adapt
+  0x554C: function () { return hex8(Math.round((simWave(0.4) > 0.7 && Math.sin(gSimNow / 1000 * 1.7) > 0.97 ? -3.5 : 0) / 0.375)); }, // knock retard deg
+  0xF08A: function () { return hex16(Math.round(simWave(0.4) * 100 / 0.0015259022)); },            // load %
+  0x6000: function () { return hex8(Math.round(78 + 25 * simWave(0.4) + 40)); },                   // gearbox temp
+  0x5853: function () { return hex16(Math.round((13.9 + 0.3 * Math.sin(gSimNow / 1000)) * 1000)); },// voltage mV
+  0x4185: function () { return hex16(Math.round((38 + 246 * simWave(0.4) + 4 * Math.sin(gSimNow / 1000 * 3.1)) * 1000)); }, // rail actual hPa
+  0x4184: function () { return hex16(Math.round((40 + 250 * simWave(0.4)) * 1000)); },             // rail requested hPa
+  0x554B: function () { return hex8(Math.round((8 + 22 * simWave(0.4)) / 0.375)); }                // ignition advance deg
+};
+
+function hex8(n) { n = ((n % 256) + 256) % 256; return ("0" + n.toString(16)).slice(-2).toUpperCase(); }
+function hex16(n) { n = ((n % 65536) + 65536) % 65536; return ("000" + n.toString(16)).slice(-4).toUpperCase(); }
 
 var origLoad = Module._load;
 Module._load = function (request, parent, isMain) {
