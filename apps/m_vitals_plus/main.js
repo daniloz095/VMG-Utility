@@ -40,8 +40,20 @@ var TABS = [
   { id: "elec",  key: "tab_elec" },
   { id: "tcase", key: "tab_tcase" },
   { id: "lap",   key: "tab_lap" },
+  { id: "more",  key: "tab_more" },
   { id: "settings", key: "tab_settings" }
 ];
+
+/* MORE tab ("Дополнительно"): second-level tabs opened from the bottom
+ * buttons of the main grid (same hit-test pattern as LAP -> DETAILS). */
+var MORE_TABS = [
+  { id: "boost", key: "m_boost" },
+  { id: "logs",  key: "m_logs" },
+  { id: "profiles", key: "m_profiles" }
+];
+var gMoreTab = "boost";     // active second-level tab inside MORE
+var gMoreBtnRects = [];     // hit-test rects of the three buttons on entry
+var gMoreBackRect = null;   // hit-test rect of the < BACK button in MORE
 
 /* ELECTRIC tab ("Бортовая сеть"): four tiles in a 2x2 grid. */
 var ELEC_TILES = [
@@ -214,6 +226,46 @@ var tcaseLive = {
   hist: []                  // [{t, lock}] rolling LIVE_WINDOW_S samples
 };
 
+/* MORE -> BOOST GAUGE state: needle gauge with peak hold. The peak decays
+ * after BOOST_PEAK_HOLD_MS without a new maximum (same idea as power peaks). */
+var BOOST_PEAK_HOLD_MS = 5000;
+var boostGauge = {
+  peak: null,               // held max boost in bar (relative)
+  peakAt: 0
+};
+
+/* MORE -> LOGGING state.
+ * events: ring buffer of notable session events {t, kind, text}.
+ * rows:   ring buffer of periodic data snapshots {t, <metric keys>} written
+ *         every gSettings.logMs while logging is armed.
+ * export: Wi-Fi export progress state (HTTP server on the HU answers the
+ *         phone's browser with a CSV download). */
+var logState = {
+  active: false,            // logging armed (REC button)
+  events: [],
+  rows: [],
+  rowCount: 0,              // total rows written since arming (rows is capped)
+  exporting: false,
+  exportMsg: null,          // last export status line shown on screen
+  btnRect: null,            // hit-test rect of the REC toggle
+  wifiBtnRect: null,        // hit-test rect of the WIFI EXPORT button
+  clearBtnRect: null        // hit-test rect of the CLEAR button
+};
+var LOG_ROWS_CAP = 1200;    // ~48 h at 1 row/s — memory stays bounded
+var LOG_EVENTS_CAP = 60;
+
+/* MORE -> PROFILES state: named configuration sets saved through the
+ * settings module (persisted on the head unit). Active profile name is kept
+ * in gSettings.profile; each profile stores its own JSON under profile_<name>. */
+var PROFILE_KEYS = ["boostSource", "boostMax", "pollMs", "demo", "language",
+                    "unitsTemp", "speedUnits", "showUnits", "peakResetMs"];
+var profileState = {
+  names: [],                // existing profile names, loaded at init
+  msg: null,                // one-line status feedback
+  msgAt: 0,
+  rects: []                 // hit-test rects of the buttons drawn this frame
+};
+
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -237,7 +289,19 @@ var I18N = {
   en: {
     tab_main: "MAIN", tab_power: "POWER", tab_hpfp: "HPFP", tab_ign: "IGNITION",
     tab_fuelcool: "FUEL/COOL", tab_elec: "ELECTRIC", tab_tcase: "TCASE",
-    tab_lap: "LAP", tab_settings: "SETTINGS",
+    tab_lap: "LAP", tab_settings: "SETTINGS", tab_more: "MORE",
+    m_boost: "BOOST GAUGE", m_logs: "LOGGING", m_profiles: "PROFILES",
+    g_peak: "PEAK", g_hold: "HOLD", g_resetPeak: "RESET PEAK",
+    g_max: "MAX",
+    lg_rec: "REC", lg_stop: "STOP REC", lg_rows: "ROWS", lg_events: "EVENTS",
+    lg_wifi: "WI-FI EXPORT", lg_clear: "CLEAR", lg_idle: "LOGGING OFF",
+    lg_on: "LOGGING ON", lg_exportStart: "CSV READY - OPEN THE LINK ON YOUR PHONE",
+    lg_exportNoWifi: "NO WI-FI IP - CHECK SETTINGS > CONNECTIVITY",
+    lg_noData: "NO ROWS YET",
+    pr_active: "ACTIVE", pr_save: "SAVE CURRENT AS", pr_load: "LOAD",
+    pr_del: "DELETE", pr_none: "NO PROFILES SAVED", pr_saved: "PROFILE SAVED",
+    pr_loaded: "PROFILE LOADED", pr_deleted: "PROFILE DELETED",
+    pr_exists: "NAME ALREADY EXISTS",
     t_boost: "BOOST", t_intake: "INTAKE", t_egt: "EGT", t_oilpress: "OIL PRESS",
     t_mix: "MIXTURE", t_coolant: "COOLANT", t_oiltemp: "OIL TEMP", t_batt: "BATTERY",
     t_gearbox: "GEARBOX", t_knock: "KNOCK", t_misf: "MISFIRES", t_rpm: "RPM",
@@ -285,7 +349,25 @@ var I18N = {
     tab_hpfp: "\u0422\u041d\u0412\u0414", tab_ign: "\u0417\u0430\u0436\u0438\u0433.",
     tab_fuelcool: "\u0422\u041e\u041f\u041b\u0418\u0412\u041e", tab_elec: "\u0421\u0415\u0422\u042c",
     tab_tcase: "\u0420\u0410\u0417\u0414", tab_lap: "\u0417\u0410\u041c\u0415\u0420",
-    tab_settings: "\u041d\u0410\u0421\u0422\u0420",
+    tab_settings: "\u041d\u0410\u0421\u0422\u0420", tab_more: "\u0414\u041e\u041f",
+    m_boost: "\u041d\u0410\u0414\u0414\u0423\u0412 (\u0428\u041a\u0410\u041b\u0410)",
+    m_logs: "\u0416\u0423\u0420\u041d\u0410\u041b", m_profiles: "\u041f\u0420\u041e\u0424\u0418\u041b\u0418",
+    g_peak: "\u041f\u0418\u041a", g_hold: "\u0423\u0414\u0415\u0420\u0416\u0410\u041d\u0418\u0415",
+    g_resetPeak: "\u0421\u0411\u0420\u041e\u0421 \u041f\u0418\u041a\u0410", g_max: "\u041c\u0410\u041a\u0421",
+    lg_rec: "\u0417\u0410\u041f\u0418\u0421\u042c", lg_stop: "\u0421\u0422\u041e\u041f \u0417\u0410\u041f\u0418\u0421\u0418",
+    lg_rows: "\u0421\u0422\u0420\u041e\u041a", lg_events: "\u0421\u041e\u0411\u042b\u0422\u0418\u042f",
+    lg_wifi: "\u0412\u042b\u0413\u0420\u0423\u0417\u041a\u0410 WI-FI", lg_clear: "\u041e\u0427\u0418\u0421\u0422\u0418\u0422\u042c",
+    lg_idle: "\u0417\u0410\u041f\u0418\u0421\u042c \u0412\u042b\u041a\u041b", lg_on: "\u0417\u0410\u041f\u0418\u0421\u042c \u0412\u041a\u041b",
+    lg_exportStart: "CSV \u0413\u041e\u0422\u041e\u0412 - \u041e\u0422\u041a\u0420\u041e\u0419\u0422\u0415 \u0421\u0421\u042b\u041b\u041a\u0423 \u041d\u0410 \u0422\u0415\u041b\u0415\u0424\u041e\u041d\u0415",
+    lg_exportNoWifi: "\u041d\u0415\u0422 IP WI-FI - \u041f\u0420\u041e\u0412\u0415\u0420\u042c\u0422\u0415 \u041f\u041e\u0414\u041a\u041b\u042e\u0427\u0415\u041d\u0418\u0415",
+    lg_noData: "\u0421\u0422\u0420\u041e\u041a \u0415\u0429\u0401 \u041d\u0415\u0422",
+    pr_active: "\u0410\u041a\u0422\u0418\u0412\u041d\u042b\u0419", pr_save: "\u0421\u041e\u0425\u0420\u0410\u041d\u0418\u0422\u042c \u041a\u0410\u041a",
+    pr_load: "\u0417\u0410\u0413\u0420\u0423\u0417\u0418\u0422\u042c", pr_del: "\u0423\u0414\u0410\u041b\u0418\u0422\u042c",
+    pr_none: "\u041f\u0420\u041e\u0424\u0418\u041b\u0418 \u041d\u0415 \u0421\u041e\u0425\u0420\u0410\u041d\u0415\u041d\u042b",
+    pr_saved: "\u041f\u0420\u041e\u0424\u0418\u041b\u042c \u0421\u041e\u0425\u0420\u0410\u041d\u0415\u041d",
+    pr_loaded: "\u041f\u0420\u041e\u0424\u0418\u041b\u042c \u0417\u0410\u0413\u0420\u0423\u0416\u0415\u041d",
+    pr_deleted: "\u041f\u0420\u041e\u0424\u0418\u041b\u042c \u0423\u0414\u0410\u041b\u0415\u041d",
+    pr_exists: "\u0422\u0410\u041a\u041e\u0415 \u0418\u041c\u042f \u0423\u0416\u0415 \u0415\u0421\u0422\u042c",
     t_boost: "\u041d\u0410\u0414\u0414\u0423\u0412", t_intake: "\u0412\u041f\u0423\u0421\u041a",
     t_egt: "\u0412\u042b\u0425\u041b\u041e\u041f", t_oilpress: "\u041c\u0410\u0421\u041b\u041e \u0414",
     t_mix: "\u0421\u041c\u0415\u0421\u042c", t_coolant: "\u0410\u041d\u0422\u0418\u0424\u0420",
@@ -1233,6 +1315,520 @@ function drawTcaseTab(ctx, top) {
     { zeroFloor: true });
 }
 
+/* ------------------------------------------------------------------ */
+/* MORE tab ("Дополнительно"): BOOST GAUGE / LOGGING / PROFILES        */
+/* ------------------------------------------------------------------ */
+
+/* generic filled button; remembers its rect for hit-testing */
+function drawButton(ctx, x, y, w, h, label, fillCol, textColor, sizeFrac) {
+  ctx.fillStyle(fillCol);
+  ctx.fillRoundRect(x, y, w, h, Math.round(h * 0.25));
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold " + Math.round(h * (sizeFrac || 0.42)) + "px sans-serif";
+  ctx.fillStyle(textColor);
+  ctx.fillText(label, x + w / 2, y + h / 2);
+  return [x, y, w, h];
+}
+
+function inRect(r, x, y) {
+  return r && x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3];
+}
+
+/* Second-level strip inside MORE (same visual language as LAP details).
+ * Returns the strip height. */
+function drawMoreTabs(ctx, top) {
+  var th = Math.round(gH * 0.075);
+  var w = Math.floor(gW / MORE_TABS.length);
+  ctx.fillStyle(c("surface"));
+  ctx.fillRect(0, top, gW, th);
+  for (var i = 0; i < MORE_TABS.length; i++) {
+    var t = MORE_TABS[i];
+    var x = i * w;
+    var active = t.id === gMoreTab;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = (active ? "bold " : "") + Math.round(th * 0.42) + "px sans-serif";
+    ctx.fillStyle(active ? c("accent") : c("textSecondary"));
+    ctx.fillText(tr(t.key), x + w / 2, top + th * 0.45);
+    if (active) {
+      ctx.fillStyle(c("accent"));
+      ctx.fillRect(x + w * 0.2, top + th - 3, w * 0.6, 3);
+    }
+  }
+  // BACK button at the right edge of the strip
+  var bw = Math.round(gW * 0.10);
+  ctx.fillStyle(c("background"));
+  ctx.fillRoundRect(gW - bw - 8, top + 6, bw, th - 12, 8);
+  ctx.font = "bold " + Math.round(th * 0.38) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  gMoreBackRect = [gW - bw - 8, top + 6, bw, th - 12];
+  ctx.fillText(tr("l_back"), gW - bw - 8 + bw / 2, top + th / 2);
+  return th;
+}
+
+/* ---- BOOST GAUGE ---------------------------------------------------- */
+
+var COL_GAUGE_OK = "#1aa05a";     // green arc section
+var COL_GAUGE_REDLINE = "#e8452c";
+
+function boostMaxBar() {
+  var m = gSettings.boostMax || (gConfig && gConfig.boostMax) || 2.5;
+  return num(m) && m > 0 ? m : 2.5;
+}
+
+/* half-circle needle gauge: -PI..0 sweep, ticks every 0.5 bar, redline from
+ * 80% of full scale, peak-hold marker with a fading TTL bar. */
+function drawBoostGaugeView(ctx, top) {
+  var area = gH - top;
+  var maxB = boostMaxBar();
+  var cur = currentBoost();
+  var cx = gW / 2;
+  var cy = top + Math.round(area * 0.78);
+  var R = Math.min(Math.round(area * 0.62), Math.round(gW * 0.30));
+
+  // background plate
+  ctx.fillStyle(c("surface"));
+  ctx.fillRoundRect(cx - R - 40, top + 8, 2 * R + 80, area - 16, 14);
+
+  var a0 = Math.PI, a1 = Math.PI * 2;   // left horizontal -> right horizontal
+  function angleFor(val) {
+    var f = Math.max(0, Math.min(1, val / maxB));
+    return a0 + (a1 - a0) * f;
+  }
+
+  // base arc
+  ctx.strokeStyle(c("divider") || c("textTertiary"));
+  ctx.lineWidth = Math.max(6, R * 0.09);
+  ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1); ctx.stroke();
+
+  // green section up to 60%, red section 80..100%
+  ctx.strokeStyle(COL_GAUGE_OK);
+  ctx.beginPath(); ctx.arc(cx, cy, R, angleFor(0), angleFor(maxB * 0.6)); ctx.stroke();
+  ctx.strokeStyle(COL_GAUGE_REDLINE);
+  ctx.beginPath(); ctx.arc(cx, cy, R, angleFor(maxB * 0.8), angleFor(maxB)); ctx.stroke();
+
+  // ticks + numbers every 0.5 bar
+  ctx.font = Math.round(R * 0.11) + "px sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  var nTicks = Math.round(maxB / 0.5);
+  for (var i = 0; i <= nTicks; i++) {
+    var tv = i * 0.5;
+    var ta = angleFor(tv);
+    var major = (tv % 1 === 0);
+    var rIn = R - (major ? R * 0.16 : R * 0.09);
+    ctx.strokeStyle(major ? c("textSecondary") : c("textTertiary"));
+    ctx.lineWidth = major ? 3 : 1;
+    ctx.beginPath();
+    ctx.moveTo(cx + R * Math.cos(ta), cy + R * Math.sin(ta));
+    ctx.lineTo(cx + rIn * Math.cos(ta), cy + rIn * Math.sin(ta));
+    ctx.stroke();
+    if (major) {
+      ctx.fillStyle(c("textSecondary"));
+      ctx.fillText(tv.toFixed(0), cx + (R * 0.78) * Math.cos(ta), cy + (R * 0.78) * Math.sin(ta));
+    }
+  }
+
+  // needle
+  var nv = num(cur) ? Math.max(0, cur) : 0;
+  var na = angleFor(nv);
+  ctx.strokeStyle(c("textPrimary"));
+  ctx.lineWidth = Math.max(3, R * 0.035);
+  ctx.beginPath();
+  ctx.moveTo(cx - R * 0.08 * Math.cos(na), cy - R * 0.08 * Math.sin(na));
+  ctx.lineTo(cx + R * 0.92 * Math.cos(na), cy + R * 0.92 * Math.sin(na));
+  ctx.stroke();
+  ctx.fillStyle(c("accent"));
+  ctx.fillCircle && ctx.fillCircle(cx, cy, Math.max(5, R * 0.05));
+
+  // digital readout under the hub
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.font = "bold " + Math.round(R * 0.24) + "px sans-serif";
+  ctx.fillStyle(num(cur) ? (cur > maxB * 0.8 ? COL_GAUGE_REDLINE : c("textPrimary")) : c("textTertiary"));
+  var uTxt = showUnits() ? " " + tr("u_bar") : "";
+  ctx.fillText((num(cur) ? cur.toFixed(2) : "--") + uTxt, cx, cy + R * 0.10);
+  ctx.font = Math.round(R * 0.10) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  ctx.fillText(tr("t_boost"), cx, cy + R * 0.34);
+
+  // peak hold: big number on the left, RESET button on the right
+  var sy = top + Math.round(area * 0.06);
+  var colW = Math.round(gW * 0.16);
+  drawStat(ctx, cx - R - 20, sy, colW, Math.round(area * 0.20),
+    tr("g_peak") + ", " + tr("u_bar"),
+    num(boostGauge.peak) ? boostGauge.peak.toFixed(2) : "--", COL_GAUGE_REDLINE);
+  profileState.rects = [];   // reset per-frame button registry
+  logState.gaugeResetRect = drawButton(ctx, cx + R - colW, sy + Math.round(area * 0.02),
+    colW, Math.round(area * 0.16), tr("g_resetPeak"), c("background"), c("textSecondary"), 0.30);
+
+  // peak TTL bar (visual countdown until the hold decays)
+  if (num(boostGauge.peak)) {
+    var ttl = BOOST_PEAK_HOLD_MS;
+    var left = Math.max(0, ttl - (Date.now() - boostGauge.peakAt));
+    var frac = left / ttl;
+    ctx.fillStyle(c("background"));
+    ctx.fillRect(cx - R - 20, sy + Math.round(area * 0.19), colW, 4);
+    ctx.fillStyle(COL_GAUGE_REDLINE);
+    ctx.fillRect(cx - R - 20, sy + Math.round(area * 0.19), Math.round(colW * frac), 4);
+  }
+}
+
+/* peak tracking for the gauge, called from the sampler tick */
+function boostGaugeStep() {
+  var now = Date.now();
+  var b = currentBoost();
+  if (num(b) && (!num(boostGauge.peak) || b > boostGauge.peak)) {
+    boostGauge.peak = b; boostGauge.peakAt = now;
+  }
+  if (num(boostGauge.peak) && now - boostGauge.peakAt > BOOST_PEAK_HOLD_MS) {
+    boostGauge.peak = null;
+  }
+}
+
+/* ---- LOGGING -------------------------------------------------------- */
+
+/* CSV header; column order mirrors LOG_CSV_COLS */
+var LOG_CSV_COLS = ["t_iso", "rpm", "speed_kmh", "boost_bar", "oilPress_bar",
+                    "lambda", "oilTemp_c", "coolant_c", "egt_c", "iat_c",
+                    "rail_act_bar", "ignAdv_deg", "knockRet_deg", "voltage_v",
+                    "altLoad_pct", "tcLock_pct", "knock_ev", "misfire_ev"];
+
+function logRowSample() {
+  var d = new Date();
+  return {
+    t: d.getTime(),
+    t_iso: d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) +
+           " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds()),
+    rpm: v.rpm, speed_kmh: lapSpeedKmh(), boost_bar: currentBoost(),
+    oilPress_bar: valueFor("oilPress"), lambda: currentLambda(),
+    oilTemp_c: v.oilTemp, coolant_c: v.coolant, egt_c: valueFor("egt"), iat_c: valueFor("iat"),
+    rail_act_bar: fuelPressureActual(), ignAdv_deg: isFresh("ignAdv") ? v.ignAdv : null,
+    knockRet_deg: isFresh("knockRetard") ? v.knockRetard : null,
+    voltage_v: valueFor("voltage"), altLoad_pct: alternatorLoadPct(),
+    tcLock_pct: tcaseLockPct(), knock_ev: counters.knock, misfire_ev: counters.misfireCount
+  };
+}
+
+function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+function logEvent(kind, text) {
+  logState.events.push({ t: Date.now(), kind: kind, text: text });
+  while (logState.events.length > LOG_EVENTS_CAP) logState.events.shift();
+}
+
+function loggingStep() {
+  if (!logState.active) return;
+  var iv = Math.max(500, gSettings.logMs || 1000);
+  var now = Date.now();
+  if (!logState.lastRowAt) logState.lastRowAt = now;
+  if (now - logState.lastRowAt >= iv) {
+    logState.lastRowAt = now;
+    logState.rows.push(logRowSample());
+    logState.rowCount++;
+    while (logState.rows.length > LOG_ROWS_CAP) logState.rows.shift();
+  }
+}
+
+function buildCsv() {
+  var lines = [LOG_CSV_COLS.join(",")];
+  for (var i = 0; i < logState.rows.length; i++) {
+    var r = logState.rows[i], cells = [];
+    for (var k = 0; k < LOG_CSV_COLS.length; k++) {
+      var val = r[LOG_CSV_COLS[k]];
+      cells.push(num(val) ? String(val) : "");
+    }
+    lines.push(cells.join(","));
+  }
+  return lines.join("\r\n");
+}
+
+/* Wi-Fi export: hand the CSV to the head-unit connectivity service, which
+ * serves it over HTTP so the phone can download it straight from the
+ * browser. The module name/API differs per firmware; we try the known
+ * shapes and report honestly when none is available. */
+function getHttpModule() {
+  var names = ["http", "connectivity", "net"];
+  for (var i = 0; i < names.length; i++) {
+    try {
+      var m = require(names[i]);
+      if (m && (m.serveFile || m.createServer || m.publishFile)) return { mod: m, name: names[i] };
+    } catch (e) { /* module not present on this firmware */ }
+  }
+  return null;
+}
+
+function wifiIpOf(mod) {
+  try {
+    if (mod.getWifiIp) return mod.getWifiIp();
+    if (mod.wifi && mod.wifi.ip) return mod.wifi.ip();
+    if (mod.ip) return typeof mod.ip === "function" ? mod.ip() : mod.ip;
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+function startWifiExport() {
+  if (!logState.rows.length) {
+    logState.exportMsg = tr("lg_noData");
+    return;
+  }
+  var h = getHttpModule();
+  var csv = buildCsv();
+  var fname = "mvitals_" + Date.now() + ".csv";
+  if (h && h.mod.serveFile) {
+    try {
+      var ip = wifiIpOf(h.mod);
+      h.mod.serveFile(fname, "text/csv", csv, function (url) {
+        logState.exporting = false;
+        logState.exportMsg = url ? (String(url) + "  \u00b7  " + logState.rows.length + " \u2192 CSV")
+                                 : tr("lg_exportStart");
+        logEvent("export", fname + " served via " + h.name);
+      });
+      logState.exporting = true;
+      logState.exportMsg = tr("lg_exportStart") + (ip ? "  http://" + ip : "");
+      return;
+    } catch (e) {
+      logState.exportMsg = "EXPORT FAILED: " + String(e && e.message || e);
+      return;
+    }
+  }
+  // no serving API on this firmware — say so instead of pretending
+  logState.exportMsg = "NO HTTP SERVICE IN THIS BUILD";
+  logEvent("export", "unavailable: " + (h ? h.name + " lacks serveFile" : "no http/connectivity/net module"));
+}
+
+function drawLoggingView(ctx, top) {
+  var area = gH - top;
+  var padX = Math.round(gW * 0.03);
+  var rowH = Math.round(area * 0.17);
+  var y = top + Math.round(area * 0.04);
+
+  // status line + buttons row
+  var st = logState.active ? tr("lg_on") : tr("lg_idle");
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.font = "bold " + Math.round(rowH * 0.42) + "px sans-serif";
+  ctx.fillStyle(logState.active ? c("alert") : c("textSecondary"));
+  ctx.fillText((logState.active ? "\u25cf " : "\u25cb ") + st, padX, y + rowH / 2);
+
+  ctx.font = Math.round(rowH * 0.34) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  var info = tr("lg_rows") + ": " + logState.rowCount +
+             "  \u00b7  " + tr("lg_events") + ": " + logState.events.length;
+  ctx.fillText(info, padX + Math.round(gW * 0.24), y + rowH / 2);
+
+  var bw = Math.round(gW * 0.17), gap = Math.round(gW * 0.015);
+  logState.btnRect = drawButton(ctx, gW - padX - bw * 3 - gap * 2, y, bw, rowH,
+    logState.active ? tr("lg_stop") : tr("lg_rec"),
+    logState.active ? c("alert") : c("success"), "#ffffff", 0.34);
+  logState.wifiBtnRect = drawButton(ctx, gW - padX - bw * 2 - gap, y, bw, rowH,
+    tr("lg_wifi"), c("background"), c("accent"), 0.30);
+  logState.clearBtnRect = drawButton(ctx, gW - padX - bw, y, bw, rowH,
+    tr("lg_clear"), c("background"), c("textSecondary"), 0.30);
+
+  // export status line
+  y += rowH + Math.round(area * 0.02);
+  ctx.textAlign = "left";
+  ctx.font = Math.round(rowH * 0.32) + "px sans-serif";
+  ctx.fillStyle(logState.exporting ? c("warning") : c("textTertiary"));
+  if (logState.exportMsg) ctx.fillText(logState.exportMsg, padX, y + Math.round(rowH * 0.2));
+
+  // event feed panel (fills the rest)
+  var py = y + Math.round(rowH * 0.5);
+  ctx.fillStyle(c("surface"));
+  ctx.fillRoundRect(padX, py, gW - 2 * padX, area - (py - top) - Math.round(area * 0.03), 12);
+  ctx.font = Math.round(area * 0.055) + "px sans-serif";
+  ctx.textBaseline = "top";
+  var lineH = Math.round(area * 0.085);
+  var maxLines = Math.floor((area - (py - top) - Math.round(area * 0.05)) / lineH);
+  var evs = logState.events.slice(-maxLines);
+  for (var i = 0; i < evs.length; i++) {
+    var e = evs[i];
+    var d = new Date(e.t);
+    ctx.fillStyle(c("textTertiary"));
+    ctx.textAlign = "left";
+    ctx.fillText(pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds()),
+      padX + 14, py + 10 + i * lineH);
+    ctx.fillStyle = undefined;   // (recorder-safe: always set below)
+    ctx.fillStyle(e.kind === "lap" ? c("accent") : e.kind === "knock" ? c("alert") : c("textSecondary"));
+    ctx.fillText(e.text, padX + Math.round(gW * 0.08), py + 10 + i * lineH);
+  }
+  if (!evs.length) {
+    ctx.fillStyle(c("textTertiary"));
+    ctx.textAlign = "center";
+    ctx.fillText("LOG EMPTY - PRESS " + tr("lg_rec"), gW / 2, py + Math.round(area * 0.2));
+  }
+}
+
+/* ---- PROFILES ------------------------------------------------------- */
+
+function profileKeyOf(name) { return "profile_" + name; }
+
+function loadProfileNames(cb) {
+  settingsStore.loadAll(function (s) {
+    var names = [];
+    s = s || {};
+    for (var k in s) {
+      if (Object.prototype.hasOwnProperty.call(s, k) && /^profile_/.test(k)) {
+        names.push(String(k).substr("profile_".length));
+      }
+    }
+    names.sort();
+    cb(names);
+  });
+}
+
+function profileCycleName() {
+  // next free default name: Track, Daily, Drag, Winter...
+  var bases = ["TRACK", "DAILY", "DRAG", "WINTER", "SPORT", "TEST"];
+  for (var i = 0; i < bases.length; i++) {
+    if (profileState.names.indexOf(bases[i]) < 0) return bases[i];
+  }
+  return "P" + (profileState.names.length + 1);
+}
+
+function saveCurrentProfile(name) {
+  if (profileState.names.indexOf(name) >= 0) {
+    profileMsg(tr("pr_exists"));
+    return;
+  }
+  var snap = {};
+  for (var i = 0; i < PROFILE_KEYS.length; i++) {
+    snap[PROFILE_KEYS[i]] = gSettings[PROFILE_KEYS[i]];
+  }
+  settingsStore.set(profileKeyOf(name), JSON.stringify(snap));
+  settingsStore.set("profile", name);
+  gSettings.profile = name;
+  profileState.names.push(name);
+  profileState.names.sort();
+  profileMsg(tr("pr_saved") + ": " + name);
+  logEvent("profile", "saved " + name);
+}
+
+function applyProfile(name) {
+  var raw = gSettings[profileKeyOf(name)];
+  if (typeof raw !== "string") {
+    // first load after boot may not have it in the cached map yet
+    settingsStore.loadAll(function (s) {
+      var r2 = s && s[profileKeyOf(name)];
+      if (typeof r2 === "string") applyProfileMap(name, r2);
+      else profileMsg(name + "?");
+    });
+    return;
+  }
+  applyProfileMap(name, raw);
+}
+
+function applyProfileMap(name, raw) {
+  var snap;
+  try { snap = JSON.parse(raw); } catch (e) { profileMsg("CORRUPT PROFILE"); return; }
+  for (var i = 0; i < PROFILE_KEYS.length; i++) {
+    var k = PROFILE_KEYS[i];
+    if (snap[k] !== undefined) {
+      gSettings[k] = snap[k];
+      settingsStore.set(k, snap[k]);
+    }
+  }
+  gSettings.profile = name;
+  settingsStore.set("profile", name);
+  profileMsg(tr("pr_loaded") + ": " + name);
+  logEvent("profile", "loaded " + name);
+  restartTimersForSettings();
+}
+
+function deleteProfile(name) {
+  settingsStore.remove(profileKeyOf(name));
+  var ix = profileState.names.indexOf(name);
+  if (ix >= 0) profileState.names.splice(ix, 1);
+  if (gSettings.profile === name) {
+    delete gSettings.profile;
+    settingsStore.remove("profile");
+  }
+  profileMsg(tr("pr_deleted") + ": " + name);
+  logEvent("profile", "deleted " + name);
+}
+
+function profileMsg(txt) {
+  profileState.msg = txt;
+  profileState.msgAt = Date.now();
+}
+
+function drawProfilesView(ctx, top) {
+  var area = gH - top;
+  var padX = Math.round(gW * 0.03);
+  var btnH = Math.round(area * 0.13);
+  var y = top + Math.round(area * 0.05);
+  profileState.rects = [];
+
+  // active profile header
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.font = "bold " + Math.round(btnH * 0.5) + "px sans-serif";
+  ctx.fillStyle(c("textPrimary"));
+  var act = gSettings.profile || "DEFAULT";
+  ctx.fillText(tr("pr_active") + ": " + act, padX, y + btnH / 2);
+
+  // SAVE CURRENT AS button (right side of the header row)
+  var bw = Math.round(gW * 0.28);
+  profileState.rects.push({
+    rect: drawButton(ctx, gW - padX - bw, y, bw, btnH,
+      tr("pr_save") + " \u00b7 " + profileCycleName(), c("accent"), "#ffffff", 0.32),
+    action: "save", arg: profileCycleName()
+  });
+
+  y += btnH + Math.round(area * 0.04);
+
+  // profile list
+  if (!profileState.names.length) {
+    ctx.font = Math.round(btnH * 0.45) + "px sans-serif";
+    ctx.fillStyle(c("textTertiary"));
+    ctx.textAlign = "center";
+    ctx.fillText(tr("pr_none"), gW / 2, y + btnH / 2);
+  }
+  var rowGap = Math.round(area * 0.02);
+  var nameW = Math.round(gW * 0.30);
+  var smallW = Math.round(gW * 0.16);
+  for (var i = 0; i < profileState.names.length; i++) {
+    var nm = profileState.names[i];
+    var isActive = gSettings.profile === nm;
+    ctx.fillStyle(c("surface"));
+    ctx.fillRoundRect(padX, y, gW - 2 * padX, btnH, 10);
+    ctx.textAlign = "left";
+    ctx.font = "bold " + Math.round(btnH * 0.42) + "px sans-serif";
+    ctx.fillStyle(isActive ? c("accent") : c("textPrimary"));
+    ctx.fillText((isActive ? "\u25cf " : "") + nm, padX + 16, y + btnH / 2);
+    if (isActive) {
+      ctx.font = Math.round(btnH * 0.3) + "px sans-serif";
+      ctx.fillStyle(c("textTertiary"));
+      ctx.fillText(tr("pr_active"), padX + 16 + ctx.measureText(nm).width * 2.2, y + btnH / 2);
+    }
+    profileState.rects.push({
+      rect: drawButton(ctx, gW - padX - smallW * 2 - 12, y + 4, smallW, btnH - 8,
+        tr("pr_load"), c("background"), c("accent"), 0.36),
+      action: "load", arg: nm
+    });
+    profileState.rects.push({
+      rect: drawButton(ctx, gW - padX - smallW, y + 4, smallW, btnH - 8,
+        tr("pr_del"), c("background"), c("alert"), 0.36),
+      action: "del", arg: nm
+    });
+    y += btnH + rowGap;
+  }
+
+  // feedback message (fades out after 4 s)
+  if (profileState.msg && Date.now() - profileState.msgAt < 4000) {
+    ctx.textAlign = "center";
+    ctx.font = "bold " + Math.round(btnH * 0.4) + "px sans-serif";
+    ctx.fillStyle(c("success"));
+    ctx.fillText(profileState.msg, gW / 2, y + btnH / 2);
+  }
+}
+
+/* MORE dispatcher */
+function drawMoreTab(ctx, top) {
+  var mTop = top + drawMoreTabs(ctx, top);
+  if (gMoreTab === "boost") drawBoostGaugeView(ctx, mTop);
+  else if (gMoreTab === "logs") drawLoggingView(ctx, mTop);
+  else drawProfilesView(ctx, mTop);
+}
+
 function lapTimeText(target) {
   var t = lap.crossed[target];
   if (num(t)) return t.toFixed(LAP_DP);
@@ -1676,6 +2272,8 @@ var gTimer = null;
 function render() {
   if (!gCanvas) return;
   lapStep();   // speed crossing / max tracking runs at UI cadence
+  boostGaugeStep();
+  loggingStep();
   var ctx = gCanvas.getContext("2d");
   ctx.fillStyle(c("background"));
   ctx.fillRect(0, 0, gW, gH);
@@ -1692,13 +2290,16 @@ function render() {
     if (gLapView === "detail" && lap.state === "done") drawLapDetails(ctx, top);
     else drawLap(ctx, top);
   }
+  else if (gActiveTab === "more") drawMoreTab(ctx, top);
+  else if (gActiveTab === "settings") drawSettingsTab(ctx, top);
   else drawPlaceholder(ctx, top, "Session logs \u2014 next step");
 }
 
 /* tabs that redraw at the fast (chart/stopwatch) cadence */
 function isFastTab() {
   return gActiveTab === "power" || gActiveTab === "hpfp" ||
-         gActiveTab === "ign" || gActiveTab === "lap" || gActiveTab === "tcase";
+         gActiveTab === "ign" || gActiveTab === "lap" || gActiveTab === "tcase" ||
+         gActiveTab === "more" || gActiveTab === "settings";
 }
 
 /* ------------------------------------------------------------------ */
