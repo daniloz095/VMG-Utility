@@ -48,6 +48,7 @@ var TABS = [
  * buttons of the main grid (same hit-test pattern as LAP -> DETAILS). */
 var MORE_TABS = [
   { id: "boost", key: "m_boost" },
+  { id: "gearcorr", key: "m_gearcorr" },
   { id: "logs",  key: "m_logs" },
   { id: "profiles", key: "m_profiles" }
 ];
@@ -242,6 +243,27 @@ var boostGauge = {
   peakAt: 0
 };
 
+/* MORE -> GEAR CORRECTIONS state ("коррекции по коробке").
+ * The transmission applies torque-reduction ("correction") events on every
+ * shift and on knock/load-limit interventions: for a short window the DME
+ * pulls ignition back and the gearbox slips the converter/clutches, so the
+ * crankshaft torque that actually reaches the wheels dips below the modelled
+ * value. We detect those dips as |acceleration - expected| spikes while under
+ * boost, and track per-gear correction magnitude (bar-equivalent intake drop
+ * and duration) plus a live rolling chart of boost vs speed — the two axes
+ * the user asked for. All figures are derived from data we already poll
+ * (boost, speed, accel estimate); no gearbox write access is used. */
+var GEAR_CORR_WINDOW_MS = 1200;   // a correction event lasts ~0.3..1 s
+var gearCorr = {
+  hist: [],               // [{t, boost, speed}] rolling LIVE_WINDOW_S samples
+  events: [],             // [{t, gear, dipBar, durMs}] newest first
+  totalEvents: 0,
+  maxDipBar: null,        // session max correction depth, bar-equivalent
+  maxDurMs: null,         // session longest correction, ms
+  lastAt: 0,              // debounce between detected events
+  curStart: null          // in-progress event start timestamp
+};
+
 /* MORE -> LOGGING state.
  * events: ring buffer of notable session events {t, kind, text}.
  * rows:   ring buffer of periodic data snapshots {t, <metric keys>} written
@@ -298,7 +320,10 @@ var I18N = {
     tab_main: "MAIN", tab_power: "POWER", tab_hpfp: "HPFP", tab_ign: "IGNITION",
     tab_fuelcool: "FUEL/COOL", tab_elec: "ELECTRIC", tab_tcase: "TCASE",
     tab_lap: "LAP", tab_settings: "SETTINGS", tab_more: "MORE",
-    m_boost: "BOOST GAUGE", m_logs: "LOGGING", m_profiles: "PROFILES",
+    m_boost: "BOOST GAUGE", m_gearcorr: "GEAR CORRECTIONS", m_logs: "LOGGING", m_profiles: "PROFILES",
+    gc_total: "CORRECTIONS", gc_maxDip: "MAX DIP", gc_maxDur: "MAX DUR", gc_gear: "GEAR",
+    gc_last: "LAST EVENTS", gc_none: "NO CORRECTIONS DETECTED", gc_reset: "RESET",
+    ch_gc: "Boost vs speed, live", c_boost2: "boost", c_speed2: "speed",
     g_peak: "PEAK", g_hold: "HOLD", g_resetPeak: "RESET PEAK",
     g_max: "MAX",
     lg_rec: "REC", lg_stop: "STOP REC", lg_rows: "ROWS", lg_events: "EVENTS",
@@ -360,6 +385,12 @@ var I18N = {
     tab_tcase: "\u0420\u0410\u0417\u0414", tab_lap: "\u0417\u0410\u041c\u0415\u0420",
     tab_settings: "\u041d\u0410\u0421\u0422\u0420", tab_more: "\u0414\u041e\u041f",
     m_boost: "\u041d\u0410\u0414\u0414\u0423\u0412 (\u0428\u041a\u0410\u041b\u0410)",
+    m_gearcorr: "\u041a\u041e\u0420\u0420. \u041f\u041e \u041a\u041f",
+    gc_total: "\u041a\u041e\u0420\u0420\u0415\u041a\u0426\u0418\u0418", gc_maxDip: "\u041c\u0410\u041a\u0421 \u041f\u0420\u041e\u0421\u0410\u0414",
+    gc_maxDur: "\u041c\u0410\u041a\u0421 \u0414\u041b\u0418\u0422.", gc_gear: "\u041f\u0415\u0420\u0415\u0414\u0410\u0427\u0410",
+    gc_last: "\u041f\u041e\u0421\u041b\u0415\u0414\u041d\u0418\u0415", gc_none: "\u041a\u041e\u0420\u0420\u0415\u041a\u0426\u0418\u0419 \u041d\u0415\u0422",
+    gc_reset: "\u0421\u0411\u0420\u041e\u0421", ch_gc: "\u041d\u0430\u0434\u0434\u0443\u0432 \u0438 \u0441\u043a\u043e\u0440\u043e\u0441\u0442\u044c, \u043e\u043d\u043b\u0430\u0439\u043d",
+    c_boost2: "\u043d\u0430\u0434\u0434\u0443\u0432", c_speed2: "\u0441\u043a\u043e\u0440\u043e\u0441\u0442\u044c",
     m_logs: "\u0416\u0423\u0420\u041d\u0410\u041b", m_profiles: "\u041f\u0420\u041e\u0424\u0418\u041b\u0418",
     g_peak: "\u041f\u0418\u041a", g_hold: "\u0423\u0414\u0415\u0420\u0416\u0410\u041d\u0418\u0415",
     g_resetPeak: "\u0421\u0411\u0420\u041e\u0421 \u041f\u0418\u041a\u0410", g_max: "\u041c\u0410\u041a\u0421",
@@ -1135,15 +1166,117 @@ function liveStep() {
   // TCASE tab: rolling lock-up % history for the live chart
   updateAccEstimate();
   pushLive(tcaseLive.hist, { t: now, lock: tcaseLockPct() });
+
+  // MORE -> GEAR CORRECTIONS: rolling boost/speed history + dip detection
+  pushLive(gearCorr.hist, { t: now, boost: currentBoost(), speed: lapSpeedKmh() });
+  gearCorrStep(now);
+}
+
+/* ------------------------------------------------------------------ */
+/* gear corrections ("коррекции по коробке")                          */
+/* ------------------------------------------------------------------ */
+
+/* Gear estimate from rpm/speed (8HP final drive ~3.15, typical ratios).
+ * Used only to label correction events; when both signals are missing the
+ * event is labelled "-" (e.g. clutchless launches, coasting). */
+var GEAR_RATIOS = [4.05, 2.71, 1.88, 1.39, 1.09, 0.86, 0.71, 0.59];
+var GEAR_FINAL = 3.15;
+var GEAR_WHEEL_KM = 2.05;   // wheel circumference, m
+function gearEstimate() {
+  var rpm = num(v.rpm) ? v.rpm : null;
+  var spd = lapSpeedKmh();
+  if (!num(rpm) || rpm < 600 || !num(spd) || spd < 1) return null;
+  var ratio = rpm / (spd * 1000 / 60 / (Math.PI * GEAR_WHEEL_KM)) * GEAR_FINAL;
+  var best = null, bd = 1e9;
+  for (var i = 0; i < GEAR_RATIOS.length; i++) {
+    var d = Math.abs(GEAR_RATIOS[i] - ratio);
+    if (d < bd) { bd = d; best = i + 1; }
+  }
+  return bd < 0.35 ? best : null;
+}
+
+/* Torque-intervention ("correction") detector. The gearbox/DME cut torque
+ * for a short window on upshifts and protective interventions; physically it
+ * shows up as a sudden drop of charge pressure (boost) while the throttle is
+ * still open and the vehicle is under load. We watch the boost derivative
+ * over ~0.3 s windows: a fall faster than GC_DIP_BAR_PER_S bar/s while boost
+ * > 0.5 bar opens an event; the event closes when boost recovers or after
+ * GEAR_CORR_WINDOW_MS. Depth = peak-to-trough drop within the event, bar. */
+var GC_DIP_BAR_PER_S = 2.2;     // min boost collapse rate, bar/s
+var gcPrev = { t: 0, boost: null };
+function gearCorrStep(now) {
+  var b = currentBoost();
+  if (!num(b)) { gcPrev.boost = null; gearCorr.curStart = null; return; }
+  if (num(gcPrev.boost) && now - gcPrev.t > 60 && now - gcPrev.t < 1200) {
+    var dt = (now - gcPrev.t) / 1000;
+    var rate = (b - gcPrev.boost) / dt;          // bar/s, negative = collapse
+    if (rate < -GC_DIP_BAR_PER_S && gcPrev.boost > 0.5 && b > 0.05 &&
+        now - gearCorr.lastAt > 400) {           // debounce overlapping edges
+      gearCorr.curStart = gcPrev.t;
+      gearCorr.dipTop = gcPrev.boost;
+      gearCorr.dipBottom = b;
+      logEvent("gearcorr", "dip " + (gcPrev.boost - b).toFixed(2) + "bar @" +
+               Math.round(lapSpeedKmh() || 0) + "km/h");
+    } else if (num(gearCorr.curStart)) {
+      if (b < (gearCorr.dipBottom !== undefined ? gearCorr.dipBottom : b)) gearCorr.dipBottom = b;
+      var dur = now - gearCorr.curStart;
+      if ((rate > 0.5 && b >= (gearCorr.dipTop || b) - 0.1) || dur > GEAR_CORR_WINDOW_MS) {
+        var dip = Math.max(0, (gearCorr.dipTop || 0) - (gearCorr.dipBottom || 0));
+        gearCorr.events.unshift({ t: gearCorr.curStart, gear: gearEstimate(),
+                                  dipBar: dip, durMs: Math.round(dur) });
+        while (gearCorr.events.length > 20) gearCorr.events.pop();
+        gearCorr.totalEvents++;
+        if (!num(gearCorr.maxDipBar) || dip > gearCorr.maxDipBar) gearCorr.maxDipBar = dip;
+        if (!num(gearCorr.maxDurMs) || dur > gearCorr.maxDurMs) gearCorr.maxDurMs = Math.round(dur);
+        gearCorr.lastAt = now;
+        gearCorr.curStart = null;
+      }
+    }
+  }
+  gcPrev.t = now; gcPrev.boost = b;
+}
+
+function resetGearCorr() {
+  gearCorr.events = [];
+  gearCorr.totalEvents = 0;
+  gearCorr.maxDipBar = null;
+  gearCorr.maxDurMs = null;
+  gearCorr.curStart = null;
+  gearCorr.lastAt = 0;
 }
 
 /* generic rolling live chart: hist entries {t, <keys>}; series keys can be
  * negative-valued (retard) — the y range is derived from the window data.
  * opts.convert: optional canonical->display value mapper (temperature and
- * speed series re-scale with the unit settings). */
+ * speed series re-scale with the unit settings).
+ * opts.normalize: map each series into its own 0..1 band so that values of
+ * very different magnitudes (e.g. boost ~2 bar vs speed ~200 km/h) stay
+ * readable on one plot; the axis labels then show the dominant series scale. */
 function drawLiveChart(ctx, x, y, w, h, title, hist, series, opts) {
   opts = opts || {};
   var cv = opts.convert || function (vv) { return vv; };
+  // per-series normalisation bounds (only used when opts.normalize)
+  var nb = [];
+  if (opts.normalize) {
+    var nnow = Date.now(), nt0 = nnow - LIVE_WINDOW_S * 1000;
+    for (var ns = 0; ns < series.length; ns++) {
+      var nlo = null, nhi = null;
+      for (var nj = 0; nj < hist.length; nj++) {
+        var nv = hist[nj][series[ns].key];
+        if (!num(nv) || hist[nj].t < nt0) continue;
+        if (nlo === null || nv < nlo) nlo = nv;
+        if (nhi === null || nv > nhi) nhi = nv;
+      }
+      if (nlo === null) { nlo = 0; nhi = 1; }
+      if (nhi === nlo) nhi = nlo + 1;
+      nb.push({ lo: nlo, hi: nhi });
+    }
+  }
+  function plotVal(si, raw) {
+    var disp = cv(raw);
+    if (!opts.normalize || !nb[si]) return disp;
+    return (disp - nb[si].lo) / (nb[si].hi - nb[si].lo);   // 0..1 band
+  }
   ctx.fillStyle(c("surface"));
   ctx.fillRoundRect(x + 4, y + 4, w - 8, h - 8, 12);
 
@@ -1666,6 +1799,66 @@ function drawLoggingView(ctx, top) {
     ctx.textAlign = "center";
     ctx.fillText("LOG EMPTY - PRESS " + tr("lg_rec"), gW / 2, py + Math.round(area * 0.2));
   }
+}
+
+/* ---- GEAR CORRECTIONS ("коррекции по коробке") --------------------- */
+
+var gearCorrRects = [];      // hit-test rects registered during drawing
+
+function drawGearCorrView(ctx, top) {
+  gearCorrRects = [];
+  var area = gH - top;
+  var padX = Math.round(gW * 0.03);
+  var statsH = Math.round(area * 0.24);
+  var cw = Math.floor((gW - 2 * padX) / 3);
+  var sy = top + Math.round(statsH * 0.06);
+
+  // three headline stats: total corrections, max dip (bar), max duration (ms)
+  drawStat(ctx, padX, sy, cw, statsH, tr("gc_total"),
+    String(gearCorr.totalEvents), c("textPrimary"));
+  drawStat(ctx, padX + cw, sy, cw, statsH, tr("gc_maxDip"),
+    num(gearCorr.maxDipBar) ? gearCorr.maxDipBar.toFixed(2) : "--", COL_GAUGE_REDLINE);
+  drawStat(ctx, padX + 2 * cw, sy, cw, statsH, tr("gc_maxDur"),
+    num(gearCorr.maxDurMs) ? String(gearCorr.maxDurMs) : "--", COL_LOCK);
+
+  // live chart: boost + speed over the rolling window
+  var chartY = top + statsH;
+  var listH = Math.round(area * 0.30);
+  var chartH = area - statsH - listH - Math.round(area * 0.14);
+  drawLiveChart(ctx, padX, chartY, gW - 2 * padX, chartH, tr("ch_gc"), gearCorr.hist, [
+    { key: "boost", color: COL_GAUGE_REDLINE, label: tr("c_boost2"), dp: 1 },
+    { key: "speed", color: COL_NM, label: tr("c_speed2"), dp: 0 }
+  ], { convert: function () { return arguments[0]; } });
+
+  // last events list (newest first): time, gear, dip bar, duration ms
+  var ly = chartY + chartH + Math.round(area * 0.02);
+  ctx.fillStyle(c("surface"));
+  ctx.fillRoundRect(padX + 4, ly, gW - 2 * padX - 8, listH, 12);
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.font = Math.round(listH * 0.13) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  ctx.fillText(tr("gc_last"), padX + 16, ly + listH * 0.12);
+  if (!gearCorr.events.length) {
+    ctx.fillStyle(c("textTertiary"));
+    ctx.fillText(tr("gc_none"), padX + 16, ly + listH * 0.55);
+  } else {
+    var rows = Math.min(4, gearCorr.events.length);
+    for (var i = 0; i < rows; i++) {
+      var ev = gearCorr.events[i];
+      var d = new Date(ev.t);
+      var hh = ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) +
+               ":" + ("0" + d.getSeconds()).slice(-2);
+      var line = hh + "   " + tr("gc_gear") + " " + (ev.gear === null ? "-" : ev.gear) +
+                 "   " + ev.dipBar.toFixed(2) + " bar   " + ev.durMs + " ms";
+      ctx.fillStyle(i === 0 ? c("textPrimary") : c("textSecondary"));
+      ctx.fillText(line, padX + 16, ly + listH * (0.30 + 0.17 * i));
+    }
+  }
+
+  // RESET button bottom-right
+  var bw = Math.round(gW * 0.16), bh = Math.round(area * 0.10);
+  gearCorrRects.push({ action: "reset", rect: drawButton(ctx, gW - padX - bw, ly + listH + Math.round(area * 0.015),
+    bw, bh, tr("gc_reset"), c("background"), c("textSecondary"), 0.34) });
 }
 
 /* ---- PROFILES ------------------------------------------------------- */
