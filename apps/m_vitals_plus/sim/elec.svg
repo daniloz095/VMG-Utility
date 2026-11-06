@@ -2,14 +2,17 @@
 <rect x="0" y="0" width="1920" height="720" fill="#000"/>
 <rect x="0" y="0" width="1920" height="720" fill="#14161a"/>
 <rect x="0" y="0" width="1920" height="65" fill="#1f2329"/>
-<text x="137" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">MAIN</text>
-<text x="411" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
-<text x="685" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">HPFP</text>
-<text x="959" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">IGNITION</text>
-<text x="1233" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">FUEL/COOL</text>
-<text x="1507" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">ELECTRIC</text>
-<rect x="1411.1" y="61" width="191.79999999999998" height="4" fill="#0f9dca"/>
-<text x="1781" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">LAP</text>
+<text x="96" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">MAIN</text>
+<text x="288" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
+<text x="480" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">HPFP</text>
+<text x="672" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">IGNITION</text>
+<text x="864" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">FUEL/COOL</text>
+<text x="1056" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">ELECTRIC</text>
+<rect x="988.8" y="61" width="134.39999999999998" height="4" fill="#0f9dca"/>
+<text x="1248" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">TCASE</text>
+<text x="1440" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">LAP</text>
+<text x="1632" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">MORE</text>
+<text x="1824" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">SETTINGS</text>
 <rect x="3" y="68" width="954" height="321" rx="10" fill="#14161a"/>
 <text x="33" y="128.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="49" text-anchor="start">VOLTAGE</text>
 <text x="33" y="283.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="131" font-weight="bold" text-anchor="start">14.0</text>

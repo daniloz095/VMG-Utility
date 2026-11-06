@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="720" viewBox="0 0 1920 720">
+<rect x="0" y="0" width="1920" height="720" fill="#000"/>
+<rect x="0" y="0" width="1920" height="720" fill="#14161a"/>
+<rect x="0" y="0" width="1920" height="65" fill="#1f2329"/>
+<text x="96" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">MAIN</text>
+<text x="288" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
+<text x="480" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">HPFP</text>
+<text x="672" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">IGNITION</text>
+<text x="864" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">FUEL/COOL</text>
+<text x="1056" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">ELECTRIC</text>
+<text x="1248" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">TCASE</text>
+<text x="1440" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">LAP</text>
+<text x="1632" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">MORE</text>
+<rect x="1564.8" y="61" width="134.39999999999998" height="4" fill="#0f9dca"/>
+<text x="1824" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">SETTINGS</text>
+<rect x="0" y="65" width="1920" height="54" fill="#1f2329"/>
+<text x="192" y="97.3" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="bold" text-anchor="middle">BOOST GAUGE</text>
+<rect x="76.80000000000001" y="116" width="230.39999999999998" height="3" fill="#0f9dca"/>
+<text x="576" y="97.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" text-anchor="middle">GEAR CORRECTIONS</text>
+<text x="960" y="97.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" text-anchor="middle">EXHAUST FLAP</text>
+<text x="1344" y="97.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" text-anchor="middle">LOGGING</text>
+<text x="1728" y="97.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" text-anchor="middle">PROFILES</text>
+<rect x="1720" y="71" width="192" height="42" rx="8" fill="#14161a"/>
+<text x="1816" y="99.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="21" font-weight="bold" text-anchor="middle">&lt; BACK</text>
+<rect x="547" y="127" width="826" height="585" rx="14" fill="#1f2329"/>
+<path d="M587.0 588.0 A373.0 373.0 0 0 1 1333.0 588.0 " fill="none" stroke="#33383f" stroke-width="33.57" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M587.0 588.0 A373.0 373.0 0 0 1 1075.3 233.3 " fill="none" stroke="#1aa05a" stroke-width="33.57" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M1261.8 368.8 A373.0 373.0 0 0 1 1333.0 588.0 " fill="none" stroke="#e8452c" stroke-width="33.57" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M587.0 588.0 L646.7 588.0 " fill="none" stroke="#9aa3ad" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="669.06" y="602.4" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="41" text-anchor="middle">0</text>
+<path d="M658.2 368.8 L685.4 388.5 " fill="none" stroke="#5b636c" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M844.7 233.3 L863.2 290.0 " fill="none" stroke="#9aa3ad" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="870.0945956565528" y="325.6" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="41" text-anchor="middle">1</text>
+<path d="M1075.3 233.3 L1064.9 265.2 " fill="none" stroke="#5b636c" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M1261.8 368.8 L1213.5 403.8 " fill="none" stroke="#9aa3ad" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="1195.3754043434471" y="431.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="41" text-anchor="middle">2</text>
+<path d="M1333.0 588.0 L1299.4 588.0 " fill="none" stroke="#5b636c" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M989.8 588.2 L616.8 585.8 " fill="none" stroke="#eef1f4" stroke-width="13.055000000000001" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="960" cy="588" r="18.650000000000002" fill="#0f9dca"/>
+<text x="960" y="699.1" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="90" font-weight="bold" text-anchor="middle">0.01</text>
+<text x="960" y="745.2" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="37" text-anchor="middle">BOOST</text>
+<text x="567" y="180.4" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="31" text-anchor="start">PEAK, bar</text>
+<text x="567" y="249.9" fill="#e8452c" font-family="DejaVu Sans, Arial, sans-serif" font-size="66" font-weight="bold" text-anchor="start">1.35</text>
+<rect x="1026" y="167" width="307" height="96" rx="24" fill="#14161a"/>
+<text x="1179.5" y="225.2" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="29" font-weight="bold" text-anchor="middle">RESET PEAK</text>
+<rect x="567" y="269" width="307" height="4" fill="#14161a"/>
+<rect x="567" y="269" width="12" height="4" fill="#e8452c"/>
+<rect x="0" y="0" width="1920" height="720" fill="#14161a"/>
+<rect x="0" y="0" width="1920" height="65" fill="#1f2329"/>
+<text x="96" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">MAIN</text>
+<text x="288" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
+<text x="480" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">HPFP</text>
+<text x="672" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">IGNITION</text>
+<text x="864" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">FUEL/COOL</text>
+<text x="1056" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">ELECTRIC</text>
+<text x="1248" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">TCASE</text>
+<text x="1440" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">LAP</text>
+<text x="1632" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">MORE</text>
+<rect x="1564.8" y="61" width="134.39999999999998" height="4" fill="#0f9dca"/>
+<text x="1824" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">SETTINGS</text>
+<rect x="0" y="65" width="1920" height="54" fill="#1f2329"/>
+<text x="192" y="97.3" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="bold" text-anchor="middle">BOOST GAUGE</text>
+<rect x="76.80000000000001" y="116" width="230.39999999999998" height="3" fill="#0f9dca"/>
+<text x="576" y="97.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" text-anchor="middle">GEAR CORRECTIONS</text>
+<text x="960" y="97.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" text-anchor="middle">EXHAUST FLAP</text>
+<text x="1344" y="97.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" text-anchor="middle">LOGGING</text>
+<text x="1728" y="97.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" text-anchor="middle">PROFILES</text>
+<rect x="1720" y="71" width="192" height="42" rx="8" fill="#14161a"/>
+<text x="1816" y="99.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="21" font-weight="bold" text-anchor="middle">&lt; BACK</text>
+<rect x="547" y="127" width="826" height="585" rx="14" fill="#1f2329"/>
+<path d="M587.0 588.0 A373.0 373.0 0 0 1 1333.0 588.0 " fill="none" stroke="#33383f" stroke-width="33.57" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M587.0 588.0 A373.0 373.0 0 0 1 1075.3 233.3 " fill="none" stroke="#1aa05a" stroke-width="33.57" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M1261.8 368.8 A373.0 373.0 0 0 1 1333.0 588.0 " fill="none" stroke="#e8452c" stroke-width="33.57" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M587.0 588.0 L646.7 588.0 " fill="none" stroke="#9aa3ad" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="669.06" y="602.4" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="41" text-anchor="middle">0</text>
+<path d="M658.2 368.8 L685.4 388.5 " fill="none" stroke="#5b636c" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M844.7 233.3 L863.2 290.0 " fill="none" stroke="#9aa3ad" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="870.0945956565528" y="325.6" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="41" text-anchor="middle">1</text>
+<path d="M1075.3 233.3 L1064.9 265.2 " fill="none" stroke="#5b636c" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M1261.8 368.8 L1213.5 403.8 " fill="none" stroke="#9aa3ad" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="1195.3754043434471" y="431.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="41" text-anchor="middle">2</text>
+<path d="M1333.0 588.0 L1299.4 588.0 " fill="none" stroke="#5b636c" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M989.8 588.2 L616.8 585.8 " fill="none" stroke="#eef1f4" stroke-width="13.055000000000001" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="960" cy="588" r="18.650000000000002" fill="#0f9dca"/>
+<text x="960" y="699.1" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="90" font-weight="bold" text-anchor="middle">0.01</text>
+<text x="960" y="745.2" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="37" text-anchor="middle">BOOST</text>
+<text x="567" y="180.4" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="31" text-anchor="start">PEAK, bar</text>
+<text x="567" y="249.9" fill="#e8452c" font-family="DejaVu Sans, Arial, sans-serif" font-size="66" font-weight="bold" text-anchor="start">1.35</text>
+<rect x="1026" y="167" width="307" height="96" rx="24" fill="#14161a"/>
+<text x="1179.5" y="225.2" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="29" font-weight="bold" text-anchor="middle">RESET PEAK</text>
+<rect x="567" y="269" width="307" height="4" fill="#14161a"/>
+<rect x="567" y="269" width="12" height="4" fill="#e8452c"/>
+</svg>

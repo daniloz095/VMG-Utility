@@ -255,7 +255,23 @@ function runApp(seconds, onReady) {
   var mod = { exports: {} };
   // the app gets its OWN Date object on the simulated clock; the tool keeps
   // the real one (otherwise setTimeout(…,60) below would never fire)
-  var SimDate = function () {};
+  // Simulated clock: callable as new Date() AND plain function/timestamp.
+  // The app does `new Date(e.t).getHours()` for log timestamps, so the
+  // constructor must accept a ms timestamp and expose real getters.
+  function SimDate(ts) {
+    if (!(this instanceof SimDate)) return new SimDate(ts);
+    this._t = (ts === undefined) ? gSimNow : ts;
+  }
+  SimDate.prototype.getHours = function () {
+    return Math.floor(((this._t % 86400000) + 86400000) % 86400000 / 3600000);
+  };
+  SimDate.prototype.getMinutes = function () {
+    return Math.floor(((this._t % 3600000) + 3600000) % 3600000 / 60000);
+  };
+  SimDate.prototype.getSeconds = function () {
+    return Math.floor(((this._t % 60000) + 60000) % 60000 / 1000);
+  };
+  SimDate.prototype.getTime = function () { return this._t; };
   SimDate.now = function () { return gSimNow; };
   new Function("exports", "require", "module", "__filename", "__dirname", "Date", mainJs)
     (mod.exports, require, mod, path.join(appDir, "main.js"), appDir, SimDate);

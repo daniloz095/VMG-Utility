@@ -399,7 +399,7 @@ function drawFlapServo(ctx, x, y, w, h, pct) {
   var r = Math.min(w, h) * 0.34;
   // pipe ring
   ctx.strokeStyle(c("textTertiary"));
-  ctx.lineWidth(Math.max(3, r * 0.12));
+  ctx.lineWidth = Math.max(3, r * 0.12);
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.stroke();
@@ -407,8 +407,8 @@ function drawFlapServo(ctx, x, y, w, h, pct) {
   var p = num(pct) ? Math.max(0, Math.min(100, pct)) : 35;
   var ang = (Math.PI / 2) * (p / 100);
   ctx.save && ctx.save();
-  ctx.strokeStyle = p > 60 ? COL_GAUGE_OK : p > 20 ? "#f0a030" : COL_GAUGE_REDLINE;
-  ctx.lineWidth(Math.max(4, r * 0.22));
+  ctx.strokeStyle(p > 60 ? COL_GAUGE_OK : p > 20 ? "#f0a030" : COL_GAUGE_REDLINE);
+  ctx.lineWidth = Math.max(4, r * 0.22);
   ctx.beginPath();
   ctx.moveTo(cx - Math.cos(ang) * r * 0.82, cy - Math.sin(ang) * r * 0.82);
   ctx.lineTo(cx + Math.cos(ang) * r * 0.82, cy + Math.sin(ang) * r * 0.82);
@@ -2021,7 +2021,6 @@ function drawLoggingView(ctx, top) {
     ctx.textAlign = "left";
     ctx.fillText(pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds()),
       padX + 14, py + 10 + i * lineH);
-    ctx.fillStyle = undefined;   // (recorder-safe: always set below)
     ctx.fillStyle(e.kind === "lap" ? c("accent") : e.kind === "knock" ? c("alert") : c("textSecondary"));
     ctx.fillText(e.text, padX + Math.round(gW * 0.08), py + 10 + i * lineH);
   }
