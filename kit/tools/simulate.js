@@ -430,7 +430,17 @@ function rasterize(svgPath, pngPath, cb) {
 
 runApp(8, function () {
   var TAB_LABELS = ["main", "power", "hpfp", "ign", "fuelcool", "elec", "lap"];
-  var wanted = tabFilter ? [tabFilter] : TAB_LABELS;
+  // extra captures: top-level tabs added after the original strip + MORE screens
+  var EXTRA_TABS = [
+    { name: "tcase",   tab: "tcase" },
+    { name: "more_boost",     tab: "more", more: "boost" },
+    { name: "more_gearcorr",  tab: "more", more: "gearcorr" },
+    { name: "more_exhaust",   tab: "more", more: "exhaust" },
+    { name: "more_logs",      tab: "more", more: "logs" },
+    { name: "more_profiles",  tab: "more", more: "profiles" },
+    { name: "settings", tab: "settings" }
+  ];
+  var wanted = tabFilter ? [tabFilter] : TAB_LABELS.concat(EXTRA_TABS.map(function (e) { return e.name; }));
   var gW = SCREEN_W, gH = SCREEN_H;
   var queue = wanted.slice();
   var results = [];
@@ -442,15 +452,33 @@ runApp(8, function () {
     }
     var tab = queue.shift();
     var idx = TAB_LABELS.indexOf(tab);
-    if (idx < 0) { results.push("SKIP " + tab + " (unknown tab)"); return next(); }
+    var extra = null;
+    for (var ei = 0; ei < EXTRA_TABS.length; ei++) if (EXTRA_TABS[ei].name === tab) extra = EXTRA_TABS[ei];
+    if (idx < 0 && !extra) { results.push("SKIP " + tab + " (unknown tab)"); return next(); }
 
     // tap the tab strip exactly like on the head unit; touchhandler calls
     // render() synchronously, so record only that single frame
     var tabH = Math.round(gH * 0.09);
-    var w = Math.floor(gW / TAB_LABELS.length);
+    var w = Math.floor(gW / 10);   // live TABS count is 10; keep taps aligned
     recorder.ops.length = 0;
     recorder.recording = true;
-    if (mocks.os.touchhandler) mocks.os.touchhandler(w * idx + w / 2, tabH / 2);
+    if (mocks.os.touchhandler) {
+      if (extra) {
+        mocks.os.touchhandler(w * 8 + w / 2, tabH / 2);   // open MORE (or SETTINGS below)
+        if (extra.tab === "settings") {
+          mocks.os.touchhandler(w * 9 + w / 2, tabH / 2);
+        } else if (extra.more) {
+          // second-level strip inside MORE: five buttons across the width
+          var mTh = Math.round(gH * 0.075);
+          var mw = Math.floor(gW / 5);
+          var order = ["boost", "gearcorr", "exhaust", "logs", "profiles"];
+          var mi = order.indexOf(extra.more);
+          if (mi >= 0) mocks.os.touchhandler(mw * mi + mw / 2, tabH + mTh / 2);
+        }
+      } else {
+        mocks.os.touchhandler(w * idx + w / 2, tabH / 2);
+      }
+    }
     recorder.recording = false;
 
     // Lap tab: run a full simulated measurement - START at standstill, let
@@ -479,6 +507,25 @@ runApp(8, function () {
         recorder.recording = false;
         emit(tab);
         return;
+      }
+    }
+    // MORE -> EXHAUST FLAP: tap OPEN, let the simulated servo travel, capture
+    if (tab === "more_exhaust" && mocks.os.touchhandler) {
+      var flapBtns = [];
+      for (var oi2 = 0; oi2 < recorder.ops.length; oi2++) {
+        var o2 = recorder.ops[oi2];
+        if (o2.op === "fillRoundRect" && o2.w > 300 && o2.w < 700 && o2.h > 50 &&
+            o2.y > gH * 0.55 && o2.y < gH * 0.85) flapBtns.push(o2);
+      }
+      if (flapBtns.length >= 3) {
+        flapBtns.sort(function (a, b) { return a.x - b.x; });
+        var openBtn = flapBtns[1];          // auto | OPEN | close left->right
+        mocks.os.touchhandler(openBtn.x + openBtn.w / 2, openBtn.y + openBtn.h / 2);
+        for (var fj = 0; fj < 10; fj++) { simTick(); advance(200); }
+        recorder.ops.length = 0;
+        recorder.recording = true;
+        renderOnce();
+        recorder.recording = false;
       }
     }
     emit(tab);

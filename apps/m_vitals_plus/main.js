@@ -282,8 +282,201 @@ var flapState = {
   busy: false,             // a write request is in flight
   msg: null,               // one-line feedback shown under the buttons
   msgAt: 0,
-  rects: []                // hit-test rects registered during drawing
+  rects: [],               // hit-test rects registered during drawing
+  noResp: false,           // all command candidates failed -> show probe hint
+  demoPosT: 0              // phase counter for the simulated servo movement
 };
+
+/* Exhaust-flap actuator control via UDS InputOutputControl (service 0x2F).
+ * The OAP diagnostic module exposes readData/testOBD; on top of it we send a
+ * raw DID-control frame through the same SOME/IP diagnostic gateway when a
+ * "writeData" entry point exists. On ECUs without it every candidate fails
+ * and the screen falls back to "NO RESPONSE - PROBE DID ON CAR". */
+function flapCmdCandidates() {
+  var cfg = gConfig && gConfig.dme ? gConfig.dme.flapCmd : null;
+  return cfg && cfg.length ? cfg : [
+    { did: "0464", valueOpen: "01", valueClose: "00", note: "Klappe IOBCANDIDAT DME8FF" },
+    { did: "0465", valueOpen: "01", valueClose: "00", note: "reserve flap DID candidate" }
+  ];
+}
+
+function flapSafeToCommand() {
+  var spd = lapSpeedKmh();
+  var cly = num(v.coolant) ? v.coolant : (isFresh("coolant") ? v.coolant : null);
+  if (num(spd) && spd > FLAP_SAFE_SPEED) return "speed";
+  if (num(cly) && cly < FLAP_SAFE_COOLANT) return "temp";
+  return null;
+}
+
+function flapMsg(txt) {
+  flapState.msg = txt;
+  flapState.msgAt = Date.now();
+}
+
+function sendFlapCommand(mode) {
+  if (flapState.busy) return;
+  var unsafe = flapSafeToCommand();
+  if (unsafe === "speed") { flapMsg(tr("ex_unsafeSpeed")); render(); return; }
+  if (unsafe === "temp")  { flapMsg(tr("ex_unsafeTemp"));  render(); return; }
+  flapState.mode = mode;
+  logEvent("flap", "command " + mode);
+
+  if (demoOn()) {   // simulator: animate the servo, no real bus traffic
+    flapMsg(mode === "open" ? tr("ex_sentOpen") :
+            mode === "close" ? tr("ex_sentClose") : tr("ex_sentAuto"));
+    flapState.demoPosT = 0;
+    render();
+    return;
+  }
+
+  var list = flapCmdCandidates();
+  var i = 0;
+  flapState.busy = true;
+  flapMsg(tr("ex_sending"));
+  function tryNext() {
+    if (i >= list.length) {
+      flapState.busy = false;
+      flapState.noResp = true;
+      flapMsg(tr("ex_noResp"));
+      render();
+      return;
+    }
+    var cand = list[i++];
+    var valHex = mode === "open" ? cand.valueOpen :
+                 mode === "close" ? cand.valueClose : "FF";
+    if (mode === "auto" && !diagnostic.releaseIOControl) { tryNext(); return; }
+    var fn = mode === "auto" ? diagnostic.releaseIOControl : diagnostic.writeData;
+    if (typeof fn !== "function") { tryNext(); return; }
+    fn.call(diagnostic, gDmeCfg.ecu, parseInt(cand.did, 16), valHex, function (res) {
+      if (res && res.ok !== false) {
+        flapState.busy = false;
+        flapState.noResp = false;
+        flapMsg(mode === "open" ? tr("ex_sentOpen") :
+                mode === "close" ? tr("ex_sentClose") : tr("ex_sentAuto"));
+        render();
+      } else {
+        tryNext();     // next DID candidate
+      }
+    });
+  }
+  tryNext();
+}
+
+/* Flap position readback poller: only runs while the EXHAUST screen is open. */
+var gFlapPollTimer = null;
+function startFlapPoll() {
+  stopFlapPoll();
+  gFlapPollTimer = setInterval(function () {
+    if (gActiveTab !== "more" || gMoreTab !== "exhaust") return;
+    if (demoOn()) {
+      flapState.demoPosT += 0.5;
+      var target = flapState.mode === "open" ? 100 : flapState.mode === "close" ? 0 : 35;
+      var cur = num(flapState.posPct) ? flapState.posPct : 35;
+      flapState.posPct = cur + (target - cur) * 0.35 + Math.sin(flapState.demoPosT) * 1.5;
+      flapState.posFreshAt = Date.now();
+      return;
+    }
+    var cfg = gConfig && gConfig.dme ? gConfig.dme.flapPos : null;
+    if (!cfg || !cfg.length) return;
+    var cand = cfg[0];
+    diagnostic.readData(gDmeCfg.ecu, [{ type: "did", id: parseInt(cand.did, 16) }], function (res) {
+      if (!res || !res.data) return;   // DID not present on this DME: stay "--"
+      var val = decode(res.data, cand);
+      if (num(val)) { flapState.posPct = val; flapState.posFreshAt = Date.now(); }
+    });
+  }, 700);
+}
+function stopFlapPoll() {
+  if (gFlapPollTimer) clearInterval(gFlapPollTimer);
+  gFlapPollTimer = null;
+}
+
+/* Servo graphic: rounded pipe with a rotating butterfly plate. */
+function drawFlapServo(ctx, x, y, w, h, pct) {
+  ctx.fillStyle(c("surface"));
+  ctx.fillRoundRect(x, y, w, h, Math.round(h * 0.18));
+  var cx = x + w / 2, cy = y + h / 2;
+  var r = Math.min(w, h) * 0.34;
+  // pipe ring
+  ctx.strokeStyle(c("textTertiary"));
+  ctx.lineWidth(Math.max(3, r * 0.12));
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  // plate angle: 0% closed -> across the pipe, 100% open -> along the flow
+  var p = num(pct) ? Math.max(0, Math.min(100, pct)) : 35;
+  var ang = (Math.PI / 2) * (p / 100);
+  ctx.save && ctx.save();
+  ctx.strokeStyle = p > 60 ? COL_GAUGE_OK : p > 20 ? "#f0a030" : COL_GAUGE_REDLINE;
+  ctx.lineWidth(Math.max(4, r * 0.22));
+  ctx.beginPath();
+  ctx.moveTo(cx - Math.cos(ang) * r * 0.82, cy - Math.sin(ang) * r * 0.82);
+  ctx.lineTo(cx + Math.cos(ang) * r * 0.82, cy + Math.sin(ang) * r * 0.82);
+  ctx.stroke();
+  ctx.restore && ctx.restore();
+  // flow arrows left/right of the disc
+  ctx.fillStyle(c("textTertiary"));
+  ctx.font = Math.round(h * 0.22) + "px sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("\u2192", x + w * 0.10, cy);
+  ctx.fillText("\u2192", x + w * 0.90, cy);
+}
+
+function drawExhaustView(ctx, top) {
+  flapState.rects = [];
+  var area = gH - top;
+  var padX = Math.round(gW * 0.03);
+  var statsH = Math.round(area * 0.22);
+  var cw = Math.floor((gW - 2 * padX) / 3);
+  var sy = top + Math.round(statsH * 0.06);
+
+  var fresh = num(flapState.posPct) && Date.now() - flapState.posFreshAt < 3000;
+  drawStat(ctx, padX, sy, cw, statsH, tr("ex_pos"),
+    fresh ? String(Math.round(flapState.posPct)) : "--",
+    fresh ? (flapState.posPct > 60 ? COL_GAUGE_OK : "#f0a030") : c("textPrimary"));
+  drawStat(ctx, padX + cw, sy, cw, statsH, tr("ex_mode"),
+    flapState.mode === "open" ? tr("ex_open") :
+    flapState.mode === "close" ? tr("ex_close") : tr("ex_auto"), c("textPrimary"));
+  var unsafe = flapSafeToCommand();
+  drawStat(ctx, padX + 2 * cw, sy, cw, statsH, tr("ex_safe"),
+    flapState.busy ? tr("ex_sending") :
+    unsafe === "speed" ? tr("ex_unsafeSpeed") :
+    unsafe === "temp" ? tr("ex_unsafeTemp") : tr("ex_safe"),
+    unsafe || flapState.busy ? COL_GAUGE_REDLINE : COL_GAUGE_OK);
+
+  // servo graphic in the middle
+  var gw2 = Math.round(gW * 0.42), gh2 = Math.round(area * 0.30);
+  drawFlapServo(ctx, Math.round((gW - gw2) / 2), top + statsH + Math.round(area * 0.03),
+    gw2, gh2, fresh ? flapState.posPct : null);
+
+  // three command buttons
+  var btnY = top + statsH + gh2 + Math.round(area * 0.05);
+  var btnH = Math.round(area * 0.12);
+  var btnW = Math.floor((gW - 2 * padX - 2 * 16) / 3);
+  var canCmd = !unsafe && !flapState.busy;
+  var cols = [
+    { mode: "auto",   label: tr("ex_auto"),  fill: canCmd ? c("background") : c("surface"), txt: c("textSecondary") },
+    { mode: "open",   label: tr("ex_open"),  fill: canCmd ? COL_GAUGE_OK : c("surface"),     txt: canCmd ? "#ffffff" : c("textTertiary") },
+    { mode: "close",  label: tr("ex_close"), fill: canCmd ? COL_GAUGE_REDLINE : c("surface"),txt: canCmd ? "#ffffff" : c("textTertiary") }
+  ];
+  for (var bi = 0; bi < cols.length; bi++) {
+    var bx = padX + bi * (btnW + 16);
+    var rect = drawButton(ctx, bx, btnY, btnW, btnH, cols[bi].label, cols[bi].fill, cols[bi].txt, 0.36);
+    flapState.rects.push({ action: cols[bi].mode, rect: rect });
+  }
+
+  // feedback line + OEM note
+  var fy = btnY + btnH + Math.round(area * 0.05);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = "bold " + Math.round(area * 0.045) + "px sans-serif";
+  if (flapState.msg && Date.now() - flapState.msgAt < 6000) {
+    ctx.fillStyle(flapState.noResp ? COL_GAUGE_REDLINE : c("accent"));
+    ctx.fillText(flapState.msg, gW / 2, fy);
+  } else {
+    ctx.fillStyle(c("textTertiary"));
+    ctx.fillText(tr("ex_note"), gW / 2, fy);
+  }
+}
 
 /* MORE -> LOGGING state.
  * events: ring buffer of notable session events {t, kind, text}.
@@ -2147,6 +2340,8 @@ function cycleSetting(key) {
 function drawMoreTab(ctx, top) {
   var mTop = top + drawMoreTabs(ctx, top);
   if (gMoreTab === "boost") drawBoostGaugeView(ctx, mTop);
+  else if (gMoreTab === "gearcorr") drawGearCorrView(ctx, mTop);
+  else if (gMoreTab === "exhaust") drawExhaustView(ctx, mTop);
   else if (gMoreTab === "logs") drawLoggingView(ctx, mTop);
   else drawProfilesView(ctx, mTop);
 }
@@ -3070,6 +3265,7 @@ function loadSettings() {
     startPolling();
     startPowerSampler();
     startDemo();
+    startFlapPoll();     // exhaust-flap position readback (idle unless screen open)
   });
 }
 
@@ -3224,6 +3420,30 @@ function init(app) {
           logState.exportMsg = null;
           render();
           return;
+        }
+        return;
+      }
+      if (gMoreTab === "gearcorr") {
+        var rg = gearCorrRects;
+        for (var gi = 0; gi < rg.length; gi++) {
+          if (inRect(rg[gi].rect, x, y) && rg[gi].action === "reset") {
+            gearCorr.events = [];
+            gearCorr.totalEvents = 0;
+            gearCorr.maxDipBar = null;
+            gearCorr.maxDurMs = null;
+            render();
+            return;
+          }
+        }
+        return;
+      }
+      if (gMoreTab === "exhaust") {
+        var rf = flapState.rects;
+        for (var fi = 0; fi < rf.length; fi++) {
+          if (inRect(rf[fi].rect, x, y)) {
+            sendFlapCommand(rf[fi].action);
+            return;   // sendFlapCommand re-renders itself
+          }
         }
         return;
       }

@@ -208,6 +208,14 @@
     "dme": {
       "ecu": 18,
       "_elecComment": "alternatorMaxA = nominal max output current for the ALT LOAD % tile (B58 water-cooled alternator ~170A; change per car)",
+      "flapPos": [
+        { "did": "0464", "bytes": 1, "at": 0, "factor": 1, "offset": 0, "min": 0, "max": 100, "note": "exhaust flap position % open (probe on car; raw logged if implausible)" },
+        { "did": "529F", "bytes": 1, "at": 0, "factor": 1, "offset": 0, "min": 0, "max": 100, "note": "reserve flap-position DID candidate" }
+      ],
+      "flapCmd": [
+        { "did": "0464", "valueOpen": "01", "valueClose": "00", "note": "UDS 0x2F InputOutputControl Klappe candidate 1 (DME8FF)" },
+        { "did": "0465", "valueOpen": "01", "valueClose": "00", "note": "candidate 2 - probe order on car" }
+      ],
       "iat": [
         {
           "did": "580F",
