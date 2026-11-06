@@ -72,19 +72,29 @@ node kit/tools/emu.js m_vitals_plus
    чтобы MGU Store мог его подхватить (Store → «Install from file» / локальная папка apps).
 2. В Store выберите пакет → Install. Приложение появится в меню OAP («M Vitals+»).
 
-### Способ B. Ручная установка по SSH
+### Способ B. Ручная установка по SSH (скрипт deploy.py)
+
+Готовый скрипт `kit/tools/deploy.py` делает всё сам: собирает пакет,
+распаковывает его, копирует на HU в `/var/opt/private/oap/<app_id>/`,
+ставит права и перезапускает oap-mainapp.
 
 ```sh
-# 1. распаковать .mgu (это tar.gz) во временную папку на ПК
+python3 kit/tools/deploy.py m_vitals_plus --host <IP> [--key ~/.ssh/id_mgu] [--user root]
+
+# опции:
+#   --dest DIR     папка приложений на HU (по умолчанию /var/opt/private/oap)
+#   --no-restart   не перезапускать oap-mainapp (перезапустите вручную позже)
+```
+
+Если на HU нет прав на запись в `/var/opt/private/oap` — уточните путь:
+`ssh root@<IP> 'ls /var/opt/private/oap/ ; ls /usr/lib/oap-mainapp/preinstalled_apps/'`
+и передайте его через `--dest`.
+
+Ручная команда без скрипта (если Python недоступен):
+
+```sh
 mkdir /tmp/mvp && tar xzf dist/m_vitals_plus@0.1.0.mgu -C /tmp/mvp
-
-# 2. положить на HU в папку приложений
 scp -r /tmp/mvp root@<IP>:/var/opt/private/oap/m_vitals_plus
-
-# если на HU нет прав на запись в /var/opt/private/oap — уточните путь:
-ssh root@<IP> 'ls /var/opt/private/oap/ ; ls /usr/lib/oap-mainapp/preinstalled_apps/'
-
-# 3. дать права владельцу OAP и перезапустить онлайн-агент
 ssh root@<IP> 'chmod -R a+rX /var/opt/private/oap/m_vitals_plus; killall oap-mainapp || true'
 ```
 
@@ -93,7 +103,7 @@ oap-mainapp перезапускается автоматически (~5–10 �
 
 Удаление: `ssh root@<IP> 'rm -rf /var/opt/private/oap/m_vitals_plus; killall oap-mainapp'`.
 
-Обновление: повторить шаги 2–3 поверх (папка заменяется целиком).
+Обновление: повторно запустить `deploy.py` (папка заменяется целиком) или повторить ручные шаги выше.
 
 ---
 
