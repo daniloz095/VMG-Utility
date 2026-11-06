@@ -36,7 +36,16 @@ var TABS = [
   { id: "hpfp",  label: "HPFP" },
   { id: "ign",   label: "IGNITION" },
   { id: "fuelcool", label: "FUEL/COOL" },
+  { id: "elec",  label: "ELECTRIC" },
   { id: "lap",   label: "LAP" }
+];
+
+/* ELECTRIC tab ("Бортовая сеть"): four tiles in a 2x2 grid. */
+var ELEC_TILES = [
+  { key: "voltage",  label: "VOLTAGE",     unit: "V", dp: 1 },
+  { key: "alternatorTemp", label: "ALT TEMP", unit: "\u00b0C", dp: 0 },
+  { key: "alternatorLoad", label: "ALT LOAD", unit: "%", dp: 0, bar: true },
+  { key: "currentOut", label: "OUTPUT",     unit: "A", dp: 0 }
 ];
 
 /* FUEL/COOL tab ("Система топлива и охлаждения"): six tiles in a 3x2 grid.
@@ -121,6 +130,10 @@ var v = {
   radTemp: null,             // radiator outlet coolant temperature, deg C
   oilQuality: null,          // oil condition %, no trusted source yet -> "--"
   oilLevel: null,            // oil level %, no trusted source yet -> "--"
+  battCurrent: null,         // IBS battery current, A (charge positive)
+  fanDuty: null,             // cooling fan duty %, raw PWM figure
+  aluIst: null,              // ALU_IST actual alternator load current, A
+  aluTemp: null,             // regulator/alternator temperature, deg C
   stamp: {}                  // key -> Date.now() of last good read
 };
 
@@ -192,7 +205,7 @@ var ignLive = {
 /* helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-var ALL_TILES = PRIMARY_TILES.concat(SECONDARY_TILES, FUELCOOL_TILES, [
+var ALL_TILES = PRIMARY_TILES.concat(SECONDARY_TILES, FUELCOOL_TILES, ELEC_TILES, [
   { key: "rpm", label: "RPM", unit: "", dp: 0 }
 ]);
 
@@ -222,6 +235,9 @@ function valueFor(key) {
   if (key === "speed") return lapSpeedKmh();
   if (key === "fuelPres") return fuelPressureActual();
   if (key === "fuelPresReq") return fuelPressureRequested();
+  if (key === "currentOut") return alternatorOutputA();
+  if (key === "alternatorLoad") return alternatorLoadPct();
+  if (key === "alternatorTemp") return alternatorTempC();
   // signal-fed values are push-based and always current while driving
   if (key === "coolant" || key === "oilTemp" || key === "rpm") {
     return num(v[key]) ? v[key] : null;
@@ -281,6 +297,33 @@ function currentLambda() {
   return lam;
 }
 
+/* ELECTRIC tab ("Бортовая сеть") derived figures.
+ * - tocootдача (alternator output current): prefer the direct ALU_IST figure
+ *   (actual alternator load in A); fall back to IBS battery current (charge
+ *   side only) so the tile still shows something while driving.
+ * - нагрузка (alternator load %): ALU_IST against the configured nominal max
+ *   output; without ALU_IST we cannot derive a real duty -> "--".
+ * - температура: regulator/alternator temperature DID; no trusted source yet
+ *   on most B58 DMEs -> "--" until probed on the car.
+ * - напряжение: IBS battery voltage (same figure as the MAIN tile). */
+function alternatorOutputA() {
+  if (isFresh("aluIst")) return v.aluIst;
+  if (isFresh("battCurrent") && v.battCurrent > 0) return v.battCurrent;
+  return null;
+}
+
+function alternatorLoadPct() {
+  if (isFresh("aluIst")) {
+    var nom = (gConfig.elec && num(gConfig.elec.alternatorMaxA)) ? gConfig.elec.alternatorMaxA : 170;
+    return Math.min(100, Math.max(0, v.aluIst / nom * 100));
+  }
+  return null;
+}
+
+function alternatorTempC() {
+  return isFresh("aluTemp") ? v.aluTemp : null;
+}
+
 /* ------------------------------------------------------------------ */
 /* colors                                                             */
 /* ------------------------------------------------------------------ */
@@ -307,6 +350,9 @@ function tileColor(key, val) {
     case "radTemp":  return val > 105 ? c("warning") : c("textPrimary");
     case "oilQuality": return val < 20 ? c("alert") : val < 40 ? c("warning") : c("success");
     case "oilLevel":   return val < 30 ? c("alert") : val < 50 ? c("warning") : c("textPrimary");
+    case "alternatorTemp": return val > 120 ? c("alert") : val > 100 ? c("warning") : c("textPrimary");
+    case "alternatorLoad": return val > 85 ? c("warning") : (val > 5 ? c("textPrimary") : c("textTertiary"));
+    case "currentOut": return val > 5 ? c("success") : c("textTertiary");
   }
   return c("textPrimary");
 }
@@ -381,6 +427,20 @@ function drawFuelCoolTab(ctx, top) {
   var rh = Math.floor(area / rows);
   for (var i = 0; i < FUELCOOL_TILES.length; i++) {
     var t = FUELCOOL_TILES[i];
+    var x = (i % cols) * cw;
+    var y = top + Math.floor(i / cols) * rh;
+    drawTile(ctx, x, y, cw, rh, t, valueFor(t.key));
+  }
+}
+
+/* ELECTRIC tab ("Бортовая сеть"): four tiles in a 2 x 2 grid. */
+function drawElecTab(ctx, top) {
+  var area = gH - top;
+  var cols = 2, rows = 2;
+  var cw = Math.floor(gW / cols);
+  var rh = Math.floor(area / rows);
+  for (var i = 0; i < ELEC_TILES.length; i++) {
+    var t = ELEC_TILES[i];
     var x = (i % cols) * cw;
     var y = top + Math.floor(i / cols) * rh;
     drawTile(ctx, x, y, cw, rh, t, valueFor(t.key));
@@ -1339,6 +1399,7 @@ function render() {
   else if (gActiveTab === "hpfp") drawHpfpTab(ctx, top);
   else if (gActiveTab === "ign") drawIgnTab(ctx, top);
   else if (gActiveTab === "fuelcool") drawFuelCoolTab(ctx, top);
+  else if (gActiveTab === "elec") drawElecTab(ctx, top);
   else if (gActiveTab === "lap") {
     if (gLapView === "detail" && lap.state === "done") drawLapDetails(ctx, top);
     else drawLap(ctx, top);
@@ -1507,11 +1568,16 @@ var gDmeCfg = null;   // config.dme from app.json (set in init)
 var POLL_METRICS = ["iat", "egt", "oilPressAbs", "boost", "lambda",
                     "mixtureAdapt", "knockRetard", "baro", "loadDirect",
                     "gearbox", "voltage", "fuelPresAct", "fuelPresReq", "ignAdv",
-                    "fuelTemp", "thermoPos", "fanRpm", "radTemp"];
+                    "fuelTemp", "thermoPos", "fanRpm", "radTemp",
+                    "battCurrent", "aluIst", "aluTemp"];
 
 /* metrics that are NOT polled from the DME (no trustworthy UDS source yet):
  * they stay null and render as "--" until wired up. */
 var NO_SOURCE_METRICS = ["oilQuality", "oilLevel"];
+
+/* value keys that storeMetric stamps; derived getters use isFresh on these */
+var METRIC_VKEY = { fanRpm: "fanRpm", battCurrent: "battCurrent",
+                    aluIst: "aluIst", aluTemp: "aluTemp" };
 
 function metricList(metric) {
   var list = gDmeCfg[metric];
@@ -1584,6 +1650,7 @@ function pollOne() {
     if (storeMetric(metric, val, cand)) {
       gResolved[metric] = cand;
       afterStore(metric, val);
+      if (metric === "fanRpm" && cand && cand.duty) v.fanDuty = val;
     } else {
       nextCandidate(metric, cand);   // implausible: try the next candidate
     }
@@ -1728,6 +1795,13 @@ function demoStep() {
   set("fanRpm", cly > 99 ? Math.round((cly - 99) * 220 + 400 * Math.abs(Math.sin(t * 0.7))) : 0);
   set("radTemp", cly - 6 - load * 4);
   // oilQuality / oilLevel: no simulated source either -> stay "--" on purpose
+
+  // ELECTRIC tab (borтовaya set'): IBS current follows voltage/regime,
+  // alternator actual load ALU_IST ~ idle 25A + load*100A, regulator temp
+  var ibs = 30 + load * 90 + 8 * Math.sin(t * 1.3);
+  set("battCurrent", ibs);
+  set("aluIst", 25 + load * 100 + 6 * Math.sin(t * 0.9));
+  set("aluTemp", 62 + load * 38);
 
   // ignition advance / knock retard for the ignition detail chart
   set("ignAdv", num(v.rpm) && v.rpm > 700 ? 8 + load * 22 - Math.abs(retardDemo()) : 8);

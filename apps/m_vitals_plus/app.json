@@ -54,8 +54,13 @@
       "boostFes": { "factor": 0.01, "offset": 0, "invalid": 255,
         "note": "sport display boost; calibrate against a known reading; raw values go to the log ('raw FES boost')" }
     },
+    "elec": {
+      "alternatorMaxA": 170,
+      "note": "nominal max alternator output current (B58 water-cooled unit ~170A); used for the ALT LOAD % tile on the ELECTRIC tab"
+    },
     "dme": {
       "ecu": 18,
+      "_elecComment": "alternatorMaxA = nominal max output current for the ALT LOAD % tile (B58 water-cooled alternator ~170A; change per car)",
       "iat": [
         { "did": "580F", "bytes": 1, "at": 0, "factor": 0.75, "offset": -48, "min": -40, "max": 150,
           "note": "ITANS Ansaugluft-Temperatur, deg C" },
@@ -174,6 +179,20 @@
           "note": "BATT_SPANNUNG IBS battery voltage, V" },
         { "obd": "42", "bytes": 2, "at": 0, "factor": 0.001, "offset": 0, "min": 8, "max": 17,
           "note": "OBD PID 0x42 control module voltage, mV -> V" }
+      ],
+      "battCurrent": [
+        { "did": "5854", "bytes": 2, "at": 0, "signed": true, "factor": 0.001, "offset": 0, "min": -200, "max": 200,
+          "note": "IBS_STROM battery current via the intelligent boost sensor, A (charge positive; candidate - check sign/scale in the log)" }
+      ],
+      "aluIst": [
+        { "did": "4469", "bytes": 2, "at": 0, "factor": 0.001, "offset": 0, "min": 0, "max": 250,
+          "note": "ALU_IST_LI or ALU_IST actual alternator load current, A (DID candidate; verify on car)" },
+        { "did": "589C", "bytes": 1, "at": 0, "factor": 1, "offset": 0, "min": 0, "max": 250,
+          "note": "alternative raw-ampere candidate" }
+      ],
+      "aluTemp": [
+        { "did": "58A1", "bytes": 1, "at": 0, "factor": 1, "offset": -40, "min": -40, "max": 150,
+          "note": "alternator/regulator temperature raw+40 encoding (candidate; many B58 DMEs do not expose it -> tile stays '--')" }
       ]
     }
   }
