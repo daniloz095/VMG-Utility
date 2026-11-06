@@ -201,7 +201,7 @@ global.clearInterval = global.clearTimeout = function (id) {
 function advance(ms) {
   var end = gSimNow + ms;
   var guard = 0;
-  while (guard++ < 200000) {
+  while (guard++ < 2000000) {
     var due = null;
     for (var i = 0; i < gTimers.length; i++) {
       var t = gTimers[i];
@@ -228,7 +228,17 @@ function runApp(seconds, onReady) {
   var app = { config: appJson.config, settings: {} };
   try {
     mod.exports.init(app);            // registers loadSettings -> setTimeout(0)
-    advance(1);                        // flush: settings loaded, pollers started
+    // flush: run the settings-load timeout without re-arming any interval
+    var dueQ = gTimers.slice();
+    gTimers.length = 0;
+    for (var qi = 0; qi < dueQ.length; qi++) {
+      var t = dueQ[qi];
+      if (!t.repeat || t.next <= gSimNow + 1) {
+        try { t.fn(); } catch (e) { console.error("cb threw:", e.stack); }
+      } else {
+        gTimers.push(t);   // keep real intervals for advance() to drive
+      }
+    }
     if (mocks.os.onchange) mocks.os.onchange("MAIN");
     // simulate `seconds` seconds of runtime: demo steps + render ticks
     for (var s = 0; s < seconds * 5; s++) { simTick(); advance(200); }
@@ -265,7 +275,7 @@ function pathD(segs, closed) {
       var sweep = g.ccw ? 0 : 1;
       var delta = g.ccw ? (g.a0 - g.a1) : (g.a1 - g.a0);
       while (delta < -1e-9) delta += Math.PI * 2;
-      while (delta > Math.PI * 2 - 1e-9) delta = Math.PI * 2;   // full circle
+      if (delta > Math.PI * 2 - 1e-9) delta = Math.PI * 2;   // full circle
       var largeArc = delta > Math.PI ? 1 : 0;
       var x0 = g.x + g.r * Math.cos(g.a0), y0 = g.y + g.r * Math.sin(g.a0);
       var x1 = g.x + g.r * Math.cos(g.a1), y1 = g.y + g.r * Math.sin(g.a1);
