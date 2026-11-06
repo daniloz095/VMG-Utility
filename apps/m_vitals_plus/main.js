@@ -126,6 +126,14 @@ var gCanvas = null;
 var gW = 0, gH = 0;
 var gActiveTab = "main";
 var gSettings = {};
+/* Defaults for every profile-able setting. saveCurrentProfile() snapshots
+ * gSettings, but on a fresh head unit most keys are absent until the user
+ * touches the SETTINGS tab — so the snapshot falls back to these values. */
+var DEFAULT_SETTINGS = {
+  boostSource: "auto", boostMax: 2.5, pollMs: 1000, demo: "auto",
+  language: "en", unitsTemp: "C", speedUnits: "kmh", showUnits: false,
+  peakResetMs: PEAK_RESET_MS
+};
 var gTheme = os.theme();
 
 // live values: number or null; plus timestamps for staleness checks
@@ -312,6 +320,7 @@ var I18N = {
     s_language: "Language", s_unitsTemp: "Temperature units", s_unitsSpeed: "Speed units",
     s_showUnits: "Show units on tiles", s_peakReset: "Peak reset interval",
     s_boostSource: "Boost source", s_demo: "Demo mode", s_pollRate: "DME poll rate",
+    s_hint: "Tap a value to switch it - settings persist automatically",
     v_en: "English", v_ru: "\u0420\u0443\u0441\u0441\u043a\u0438\u0439",
     v_celsius: "\u00b0C", v_fahrenheit: "\u00b0F", v_kmh: "km/h", v_mph: "mph",
     v_on: "ON", v_off: "OFF", v_auto: "AUTO",
@@ -384,6 +393,7 @@ var I18N = {
     s_unitsSpeed: "\u0415\u0434. \u0441\u043a\u043e\u0440\u043e\u0441\u0442\u0438", s_showUnits: "\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0435\u0434\u0438\u043d\u0438\u0446\u044b",
     s_peakReset: "\u0421\u0431\u0440\u043e\u0441 \u043f\u0438\u043a\u043e\u0432",
     s_boostSource: "\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u043d\u0430\u0434\u0434\u0443\u0432\u0430",
+    s_hint: "\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u043d\u0430 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435, \u0447\u0442\u043e\u0431\u044b \u043f\u0435\u0440\u0435\u043a\u043b\u044e\u0447\u0438\u0442\u044c - \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u044e\u0442\u0441\u044f \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438",
     s_demo: "\u0414\u0435\u043c\u043e-\u0440\u0435\u0436\u0438\u043c", s_pollRate: "\u041e\u043f\u0440\u043e\u0441 DME",
     v_en: "English", v_ru: "\u0420\u0443\u0441\u0441\u043a\u0438\u0439",
     v_celsius: "\u00b0C", v_fahrenheit: "\u00b0F", v_kmh: "\u043a\u043c/\u0447", v_mph: "\u043c\u0438\u043b\u044c/\u0447",
@@ -1692,7 +1702,8 @@ function saveCurrentProfile(name) {
   }
   var snap = {};
   for (var i = 0; i < PROFILE_KEYS.length; i++) {
-    snap[PROFILE_KEYS[i]] = gSettings[PROFILE_KEYS[i]];
+    var pk = PROFILE_KEYS[i];
+    snap[pk] = (gSettings[pk] !== undefined) ? gSettings[pk] : DEFAULT_SETTINGS[pk];
   }
   settingsStore.set(profileKeyOf(name), JSON.stringify(snap));
   settingsStore.set("profile", name);
@@ -1819,6 +1830,86 @@ function drawProfilesView(ctx, top) {
     ctx.fillStyle(c("success"));
     ctx.fillText(profileState.msg, gW / 2, y + btnH / 2);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* SETTINGS tab: cycle-through rows (language, units, demo, poll rate)  */
+/* ------------------------------------------------------------------ */
+
+var SETTINGS_ROWS = [
+  { key: "language",    labelKey: "s_language",   values: ["en", "ru"],          valKeys: ["v_en", "v_ru"] },
+  { key: "unitsTemp",   labelKey: "s_unitsTemp",  values: ["C", "F"],            valKeys: ["v_celsius", "v_fahrenheit"] },
+  { key: "speedUnits",  labelKey: "s_unitsSpeed", values: ["kmh", "mph"],        valKeys: ["v_kmh", "v_mph"] },
+  { key: "showUnits",   labelKey: "s_showUnits",  values: [false, true],         valKeys: ["v_off", "v_on"] },
+  { key: "peakResetMs", labelKey: "s_peakReset",  values: [3000, 6000, 10000, 30000],
+    format: function (val) { return String(Math.round(val / 1000)) + " s"; } },
+  { key: "boostSource", labelKey: "s_boostSource", values: ["auto", "dme", "fes"], valKeys: ["v_auto", "v_auto", "v_auto"],
+    format: function (val) { return String(val).toUpperCase(); } },
+  { key: "demo",        labelKey: "s_demo",       values: ["auto", "on", "off"], valKeys: ["v_auto", "v_on", "v_off"] },
+  { key: "pollMs",      labelKey: "s_pollRate",   values: [500, 1000, 2000],
+    format: function (val) { return String(val) + " ms"; } }
+];
+
+var settingsState = { rects: [] };   // hit-test rects of the value buttons
+
+function settingValue(row) {
+  var cur = gSettings[row.key];
+  if (cur === undefined && DEFAULT_SETTINGS[row.key] !== undefined) cur = DEFAULT_SETTINGS[row.key];
+  var ix = row.values.indexOf(cur);
+  return ix < 0 ? 0 : ix;
+}
+
+function settingText(row) {
+  var ix = settingValue(row);
+  if (row.format) return row.format(row.values[ix]);
+  return tr(row.valKeys[ix]);
+}
+
+function drawSettingsTab(ctx, top) {
+  var area = gH - top;
+  var padX = Math.round(gW * 0.18);
+  var rowH = Math.min(Math.round(area / (SETTINGS_ROWS.length + 1)), Math.round(gH * 0.10));
+  var y = top + Math.round((area - rowH * SETTINGS_ROWS.length) / 2);
+  var valW = Math.round(gW * 0.22);
+  settingsState.rects = [];
+
+  ctx.textBaseline = "middle";
+  for (var i = 0; i < SETTINGS_ROWS.length; i++) {
+    var row = SETTINGS_ROWS[i];
+    var cy = y + i * rowH;
+    // zebra background for readability
+    if (i % 2 === 0) {
+      ctx.fillStyle(c("surface"));
+      ctx.fillRoundRect(padX - 14, cy, gW - 2 * padX + 28, rowH - 4, 8);
+    }
+    ctx.textAlign = "left";
+    ctx.font = Math.round(rowH * 0.4) + "px sans-serif";
+    ctx.fillStyle(c("textPrimary"));
+    ctx.fillText(tr(row.labelKey), padX, cy + rowH / 2);
+    settingsState.rects.push({
+      rect: drawButton(ctx, gW - padX - valW, cy + 3, valW, rowH - 10,
+        "<  " + settingText(row) + "  >", c("background"), c("accent"), 0.36),
+      action: "cycle", arg: row.key
+    });
+  }
+
+  // footer hint
+  ctx.textAlign = "center";
+  ctx.font = Math.round(rowH * 0.32) + "px sans-serif";
+  ctx.fillStyle(c("textTertiary"));
+  ctx.fillText(tr("s_hint"), gW / 2, y + SETTINGS_ROWS.length * rowH + rowH * 0.5);
+}
+
+/* Tap a value button -> move to the next allowed value, persist, re-arm. */
+function cycleSetting(key) {
+  var row = null;
+  for (var i = 0; i < SETTINGS_ROWS.length; i++) if (SETTINGS_ROWS[i].key === key) row = SETTINGS_ROWS[i];
+  if (!row) return;
+  var ix = (settingValue(row) + 1) % row.values.length;
+  var val = row.values[ix];
+  gSettings[key] = val;
+  settingsStore.set(key, val);
+  restartTimersForSettings();   // language/units repaint at once; poll/demo re-arm
 }
 
 /* MORE dispatcher */
@@ -2292,7 +2383,6 @@ function render() {
   }
   else if (gActiveTab === "more") drawMoreTab(ctx, top);
   else if (gActiveTab === "settings") drawSettingsTab(ctx, top);
-  else drawPlaceholder(ctx, top, "Session logs \u2014 next step");
 }
 
 /* tabs that redraw at the fast (chart/stopwatch) cadence */
@@ -2744,10 +2834,24 @@ function stopDemo() {
 function loadSettings() {
   settingsStore.loadAll(function (s) {
     gSettings = s || {};
+    // hydrate profile names for the PROFILES screen
+    loadProfileNames(function (names) { profileState.names = names; });
     startPolling();
     startPowerSampler();
     startDemo();
   });
+}
+
+/* Re-arm all timers after a settings change (profile load, SETTINGS tab).
+ * Poll rate, demo mode and UI refresh can all shift, so tear everything
+ * down and start fresh instead of patching individual intervals. */
+function restartTimersForSettings() {
+  startPolling();          // reads gSettings.pollMs itself and stops the old one
+  startPowerSampler();     // same pattern for the 100 ms sampler
+  startDemo();             // demo on/off may have flipped in the profile
+  if (gTimer) clearInterval(gTimer);
+  gTimer = setInterval(render, isFastTab() ? POWER_REFRESH_MS : REFRESH_MS);
+  render();
 }
 
 /* ------------------------------------------------------------------ */
@@ -2834,6 +2938,76 @@ function init(app) {
       if (d && x >= d[0] && x <= d[0] + d[2] && y >= d[1] && y <= d[1] + d[3]) {
         gLapView = "detail";
         render();
+      }
+      return;
+    }
+    /* MORE tab ("Дополнительно"): second-level strip, BACK button and the
+     * per-screen buttons (REC/WIFI/CLEAR, gauge RESET, profile SAVE/LOAD/DEL) */
+    if (gActiveTab === "more") {
+      var mTop = tabH;
+      var mTh = Math.round(gH * 0.075);
+      if (y >= mTop && y <= mTop + mTh) {
+        if (inRect(gMoreBackRect, x, y)) {
+          gActiveTab = "main";            // BACK leaves the MORE section
+          if (gTimer) {
+            clearInterval(gTimer);
+            gTimer = setInterval(render, isFastTab() ? POWER_REFRESH_MS : REFRESH_MS);
+          }
+          render();
+          return;
+        }
+        var mw = Math.floor(gW / MORE_TABS.length);
+        var mi = Math.min(MORE_TABS.length - 1, Math.floor(x / mw));
+        gMoreTab = MORE_TABS[mi].id;
+        render();
+        return;
+      }
+      if (gMoreTab === "boost") {
+        if (inRect(logState.gaugeResetRect, x, y)) {
+          boostGauge.peak = null;         // manual peak-hold reset
+          render();
+        }
+        return;
+      }
+      if (gMoreTab === "logs") {
+        if (inRect(logState.btnRect, x, y)) {
+          logState.active = !logState.active;
+          if (logState.active) {
+            logState.lastRowAt = 0;
+            logEvent("log", "REC armed @" + Math.max(500, gSettings.logMs || 1000) + "ms");
+          } else {
+            logEvent("log", "REC stopped, " + logState.rowCount + " rows");
+          }
+          render();
+          return;
+        }
+        if (inRect(logState.wifiBtnRect, x, y)) {
+          startWifiExport();
+          render();
+          return;
+        }
+        if (inRect(logState.clearBtnRect, x, y)) {
+          logState.rows = [];
+          logState.events = [];
+          logState.rowCount = 0;
+          logState.exportMsg = null;
+          render();
+          return;
+        }
+        return;
+      }
+      if (gMoreTab === "profiles") {
+        var rs = profileState.rects;
+        for (var ri = 0; ri < rs.length; ri++) {
+          if (inRect(rs[ri].rect, x, y)) {
+            var a = rs[ri].action, arg = rs[ri].arg;
+            if (a === "save") saveCurrentProfile(arg);
+            else if (a === "load") applyProfile(arg);
+            else if (a === "del") deleteProfile(arg);
+            render();
+            return;
+          }
+        }
       }
     }
   };
