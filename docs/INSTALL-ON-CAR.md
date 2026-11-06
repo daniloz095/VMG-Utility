@@ -63,16 +63,41 @@ node kit/tools/emu.js m_vitals_plus
 
 ## 3. Установить на HU
 
-Два способа. Первый — через MGU Store, если он стоит на машине (самый простой).
-Второй — вручную по SSH (работает всегда).
+Три способа. Первый — PowerShell-скрипт (рекомендуется для Windows), второй —
+через MGU Store, если он стоит на машине, третий — вручную по SSH (работает всегда).
 
-### Способ A. MGU Store
+### Способ A (рекомендуемый). install.ps1 — сборка + установка одной командой (Windows)
+
+Скрипт `kit/tools/install.ps1` делает всё автоматически: вызывает `build.py`,
+распаковывает `.mgu`, подключается к HU по SSH с вашим ключом, загружает приложение
+в `/var/opt/private/oap/<app_id>/`, ставит права и перезапускает oap-mainapp.
+
+```powershell
+# из корня репозитория (IP машины по enet, например 172.16.0.1):
+.\kit\tools\install.ps1 -HostName 172.16.0.1
+
+# без пересборки — поставить готовый пакет из dist/:
+.\kit\tools\install.ps1 -HostName 172.16.0.1 -SkipBuild
+```
+
+Параметры:
+- `-AppId m_vitals_plus` — какое приложение (по умолчанию);
+- `-KeyPath C:\Users\dmpol\.ssh\mgu_root_key` — SSH-ключ (уже задан по умолчанию);
+- `-User root`, `-RemoteBase /var/opt/private/oap` — при необходимости изменить;
+- `-NoRestart` — не перезапускать oap-mainapp.
+
+Требования: OpenSSH Client (компонент Windows 10+), Python 3 и Node.js на PATH
+(для сборки; browserify подтягивается автоматически). Если скрипт сообщит
+«Cannot SSH to …» — проверьте зажигание/питание HU, IP и что ключ читается
+(`ssh -i <ключ> root@<IP>` должен пустить без пароля).
+
+### Способ B. MGU Store
 
 1. Положите `dist/m_vitals_plus@0.1.0.mgu` на флешку (FAT32) или раздайте по Wi-Fi так,
    чтобы MGU Store мог его подхватить (Store → «Install from file» / локальная папка apps).
 2. В Store выберите пакет → Install. Приложение появится в меню OAP («M Vitals+»).
 
-### Способ B. Ручная установка по SSH (скрипт deploy.py)
+### Способ C. Ручная установка по SSH (скрипт deploy.py — Linux/macOS)
 
 Готовый скрипт `kit/tools/deploy.py` делает всё сам: собирает пакет,
 распаковывает его, копирует на HU в `/var/opt/private/oap/<app_id>/`,
