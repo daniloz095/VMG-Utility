@@ -2,11 +2,12 @@
 <rect x="0" y="0" width="1920" height="720" fill="#000"/>
 <rect x="0" y="0" width="1920" height="720" fill="#14161a"/>
 <rect x="0" y="0" width="1920" height="65" fill="#1f2329"/>
-<text x="240" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">MAIN</text>
-<rect x="72" y="61" width="336" height="4" fill="#0f9dca"/>
-<text x="720" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
-<text x="1200" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">BOOST GAUGE</text>
-<text x="1680" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">LOGS</text>
+<text x="192" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">MAIN</text>
+<rect x="57.599999999999994" y="61" width="268.79999999999995" height="4" fill="#0f9dca"/>
+<text x="576" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
+<text x="960" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">HPFP</text>
+<text x="1344" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">IGNITION</text>
+<text x="1728" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">LAP</text>
 <rect x="3" y="68" width="474" height="157" rx="10" fill="#14161a"/>
 <text x="16" y="95.9" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">BOOST</text>
 <text x="16" y="173.7" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="65" font-weight="bold" text-anchor="start">0.01</text>

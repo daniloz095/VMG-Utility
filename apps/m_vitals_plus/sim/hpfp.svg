@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="720" viewBox="0 0 1920 720">
+<rect x="0" y="0" width="1920" height="720" fill="#000"/>
+<rect x="0" y="0" width="1920" height="720" fill="#14161a"/>
+<rect x="0" y="0" width="1920" height="65" fill="#1f2329"/>
+<text x="192" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">MAIN</text>
+<text x="576" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
+<text x="960" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">HPFP</text>
+<rect x="825.6" y="61" width="268.79999999999995" height="4" fill="#0f9dca"/>
+<text x="1344" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">IGNITION</text>
+<text x="1728" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">LAP</text>
+<text x="58" y="118.1" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="44" text-anchor="start">RAIL ACTUAL, bar</text>
+<text x="58" y="216.9" fill="#3aa0ff" font-family="DejaVu Sans, Arial, sans-serif" font-size="94" font-weight="bold" text-anchor="start">34</text>
+<text x="659" y="118.1" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="44" text-anchor="start">PEAK ACTUAL, bar</text>
+<text x="659" y="216.9" fill="#3aa0ff" font-family="DejaVu Sans, Arial, sans-serif" font-size="94" font-weight="bold" text-anchor="start">281</text>
+<rect x="659" y="243.5" width="481" height="4" fill="#14161a"/>
+<rect x="659" y="243.5" width="88" height="4" fill="#3aa0ff"/>
+<text x="1260" y="118.1" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="44" text-anchor="start">PEAK REQUESTED, bar</text>
+<text x="1260" y="216.9" fill="#f0a030" font-family="DejaVu Sans, Arial, sans-serif" font-size="94" font-weight="bold" text-anchor="start">290</text>
+<rect x="1260" y="243.5" width="481" height="4" fill="#14161a"/>
+<rect x="1260" y="243.5" width="96" height="4" fill="#f0a030"/>
+<rect x="62" y="239" width="1796" height="477" rx="12" fill="#1f2329"/>
+<path d="M184.0 662.0 L1808.0 662.0 " fill="none" stroke="#33383f" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="178" y="674.6" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="end">13</text>
+<path d="M184.0 574.8 L1808.0 574.8 " fill="none" stroke="#33383f" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="178" y="587.4" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="end">86</text>
+<path d="M184.0 487.5 L1808.0 487.5 " fill="none" stroke="#33383f" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="178" y="500.1" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="end">158</text>
+<path d="M184.0 400.3 L1808.0 400.3 " fill="none" stroke="#33383f" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="178" y="412.9" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="end">231</text>
+<path d="M184.0 313.0 L1808.0 313.0 " fill="none" stroke="#33383f" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="178" y="325.6" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="end">303</text>
+<text x="184" y="706.5" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="middle">-20s</text>
+<text x="590" y="706.5" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="middle">-15s</text>
+<text x="996" y="706.5" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="middle">-10s</text>
+<text x="1402" y="706.5" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="middle">-5s</text>
+<text x="1808" y="706.5" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="middle">now</text>
+<text x="184" y="289.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="39" text-anchor="start">HPFP rail pressure, live</text>
+<rect x="752.8000000000001" y="259" width="45" height="4" fill="#3aa0ff"/>
+<text x="810.8000000000001" y="277.6" fill="#3aa0ff" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="start">actual</text>
+<rect x="983.6000000000001" y="259" width="45" height="4" fill="#f0a030"/>
+<text x="1041.6000000000001" y="277.6" fill="#f0a030" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="start">requested</text>
+<path d="M533.2 586.7 L541.3 546.5 L557.5 546.5 L565.6 512.0 L573.8 479.4 L590.0 479.4 L598.1 445.1 L606.2 410.6 L622.5 410.6 L630.6 381.6 L638.7 362.4 L655.0 362.4 L663.1 351.9 L671.2 345.1 L687.4 345.1 L695.6 339.0 L703.7 335.7 L719.9 335.7 L728.0 340.4 L736.2 355.8 L752.4 355.8 L760.5 379.2 L768.6 404.8 L784.9 404.8 L793.0 429.8 L801.1 456.8 L817.4 456.8 L825.5 490.4 L833.6 531.7 L849.8 531.7 L858.0 576.4 L866.1 618.7 L882.3 629.3 L890.4 633.2 L898.6 628.5 L914.8 628.5 L922.9 627.9 L931.0 632.0 L947.3 632.0 L955.4 636.4 L963.5 636.4 L979.8 636.4 L987.9 632.1 L996.0 627.9 L1012.2 627.9 L1020.4 628.5 L1028.5 633.1 L1044.7 633.1 L1052.8 636.9 L1061.0 635.8 L1077.2 635.8 L1085.3 631.0 L1093.4 627.6 L1109.7 627.6 L1117.8 629.2 L1125.9 634.1 L1142.2 634.1 L1150.3 637.1 L1158.4 634.9 L1174.6 634.9 L1182.8 630.0 L1190.9 627.5 L1207.1 627.5 L1215.2 630.1 L1223.4 635.1 L1239.6 635.1 L1247.7 632.1 L1255.8 587.7 L1272.1 587.7 L1280.2 542.4 L1288.3 502.3 L1304.6 502.3 L1312.7 469.6 L1320.8 441.3 L1337.0 441.3 L1345.2 412.9 L1353.3 384.2 L1369.5 384.2 L1377.6 359.6 L1385.8 344.5 L1402.0 344.5 L1410.1 339.5 L1418.2 340.3 L1434.5 340.3 L1442.6 342.4 L1450.7 346.0 L1467.0 346.0 L1475.1 355.7 L1483.2 375.4 L1499.4 375.4 L1507.6 404.1 L1515.7 436.1 L1531.9 436.1 L1540.0 467.2 L1548.2 498.0 L1564.4 498.0 L1572.5 533.0 L1580.6 575.0 L1596.9 575.0 L1605.0 621.1 L1613.1 637.1 L1629.4 637.1 L1637.5 634.7 L1645.6 629.8 L1661.8 629.8 L1670.0 627.5 L1678.1 630.3 L1694.3 630.3 L1702.4 635.3 L1710.6 637.0 L1726.8 637.0 L1734.9 633.8 L1743.0 628.9 L1759.3 628.9 L1767.4 627.7 L1775.5 631.4 L1791.8 635.8 L1799.9 636.0 L1808.0 636.7 " fill="none" stroke="#3aa0ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1808" cy="636.7247312148069" r="4" fill="#3aa0ff"/>
+<path d="M533.2 587.9 L541.3 546.7 L557.5 546.7 L565.6 507.1 L573.8 470.0 L590.0 470.0 L598.1 435.9 L606.2 405.7 L622.5 405.7 L630.6 379.9 L638.7 358.9 L655.0 358.9 L663.1 343.3 L671.2 333.2 L687.4 333.2 L695.6 329.0 L703.7 330.6 L719.9 330.6 L728.0 338.1 L736.2 351.3 L752.4 351.3 L760.5 370.0 L768.6 393.8 L784.9 393.8 L793.0 422.1 L801.1 454.6 L817.4 454.6 L825.5 490.4 L833.6 529.0 L849.8 529.0 L858.0 569.6 L866.1 611.4 L882.3 611.4 L890.4 629.9 L898.6 629.9 L914.8 629.9 L922.9 629.9 L931.0 629.9 L947.3 629.9 L955.4 629.9 L963.5 629.9 L979.8 629.9 L987.9 629.9 L996.0 629.9 L1012.2 629.9 L1020.4 629.9 L1028.5 629.9 L1044.7 629.9 L1052.8 629.9 L1061.0 629.9 L1077.2 629.9 L1085.3 629.9 L1093.4 629.9 L1109.7 629.9 L1117.8 629.9 L1125.9 629.9 L1142.2 629.9 L1150.3 629.9 L1158.4 629.9 L1174.6 629.9 L1182.8 629.9 L1190.9 629.9 L1207.1 629.9 L1215.2 629.9 L1223.4 629.9 L1239.6 629.9 L1247.7 624.8 L1255.8 582.9 L1272.1 582.9 L1280.2 541.8 L1288.3 502.5 L1304.6 502.5 L1312.7 465.7 L1320.8 432.1 L1337.0 432.1 L1345.2 402.4 L1353.3 377.1 L1369.5 646.1 L1377.6 356.7 L1385.8 341.8 L1402.0 341.8 L1410.1 332.4 L1418.2 328.9 L1434.5 328.9 L1442.6 331.2 L1450.7 339.4 L1467.0 339.4 L1475.1 353.3 L1483.2 372.6 L1499.4 372.6 L1507.6 396.9 L1515.7 425.8 L1531.9 425.8 L1540.0 458.7 L1548.2 495.0 L1564.4 495.0 L1572.5 533.8 L1580.6 574.6 L1596.9 574.6 L1605.0 616.4 L1613.1 629.9 L1629.4 629.9 L1637.5 629.9 L1645.6 629.9 L1661.8 629.9 L1670.0 629.9 L1678.1 629.9 L1694.3 629.9 L1702.4 629.9 L1710.6 629.9 L1726.8 629.9 L1734.9 629.9 L1743.0 629.9 L1759.3 629.9 L1767.4 629.9 L1775.5 629.9 L1791.8 629.9 L1799.9 629.9 L1808.0 629.9 " fill="none" stroke="#f0a030" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1808" cy="629.8913219102992" r="4" fill="#f0a030"/>
+</svg>

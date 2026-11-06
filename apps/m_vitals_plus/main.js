@@ -1810,6 +1810,7 @@ exports._sim = {
   ignLive: ignLive,
   render: render,
   liveStep: liveStep,
+  rewindDemo: function () { gDemoT = 0; },   // speed wave starts at standstill
   touch: function () { return os.touchhandler; },
   setDetailTab: function (id) { gLapView = "detail"; gDetailTab = id; },
   setMainTab: function (id) { gActiveTab = id; gLapView = "main"; }

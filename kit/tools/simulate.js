@@ -249,6 +249,8 @@ function advance(ms) {
   gSimNow = end;
 }
 
+var gAppExports = null;   // the app's module.exports (test hooks in ._sim)
+
 function runApp(seconds, onReady) {
   var mod = { exports: {} };
   // the app gets its OWN Date object on the simulated clock; the tool keeps
@@ -257,6 +259,7 @@ function runApp(seconds, onReady) {
   SimDate.now = function () { return gSimNow; };
   new Function("exports", "require", "module", "__filename", "__dirname", "Date", mainJs)
     (mod.exports, require, mod, path.join(appDir, "main.js"), appDir, SimDate);
+  gAppExports = mod.exports;
 
   var app = { config: appJson.config, settings: {} };
   try {
@@ -285,6 +288,24 @@ function runApp(seconds, onReady) {
 /* ------------------------------------------------------------------ */
 /* replay recorded ops into an SVG                                     */
 /* ------------------------------------------------------------------ */
+
+/* rewind the app's demo wave so the simulated speed is at standstill;
+ * needs a following advance() tick for demoStep to push the new values. */
+function gDemoRewind() {
+  var sim = gAppExports && gAppExports._sim;
+  if (!sim) return;
+  // demoStep derives speed from its own phase counter; find the timer that
+  // runs it and reset the phase via the exported hook when available, else
+  // simply stop feeding load: set counters/knock aside and let the wave run
+  if (typeof sim.rewindDemo === "function") { sim.rewindDemo(); return; }
+}
+
+/* force one synchronous render frame (used after lap STOP to capture the
+ * frozen results screen) */
+function renderOnce() {
+  var sim = gAppExports && gAppExports._sim;
+  if (sim && typeof sim.render === "function") sim.render();
+}
 
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -448,7 +469,7 @@ runApp(8, function () {
         // rewind the demo wave so the speed is at standstill right now
         gDemoRewind();
         advance(300);                       // one render tick with speed ~0
-        lap.btnRect && mocks.os.touchhandler(btnX, btnY);   // START
+        mocks.os.touchhandler(btnX, btnY);   // START
         var frames = Math.round(8 / 0.2);   // 8 simulated seconds of driving
         for (var fi = 0; fi < frames; fi++) { simTick(); advance(200); }
         mocks.os.touchhandler(btnX, btnY);  // STOP -> freeze results

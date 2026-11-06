@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="720" viewBox="0 0 1920 720">
+<rect x="0" y="0" width="1920" height="720" fill="#000"/>
+<rect x="0" y="0" width="1920" height="720" fill="#14161a"/>
+<rect x="0" y="0" width="1920" height="65" fill="#1f2329"/>
+<text x="192" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">MAIN</text>
+<text x="576" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
+<text x="960" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">HPFP</text>
+<text x="1344" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">IGNITION</text>
+<text x="1728" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">LAP</text>
+<rect x="1593.6" y="61" width="268.79999999999995" height="4" fill="#0f9dca"/>
+<text x="989" y="330.9" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="197" font-weight="bold" text-anchor="middle">0</text>
+<text x="989" y="409.1" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="46" text-anchor="middle">km/h</text>
+<rect x="559" y="576" width="411" height="105" rx="14" fill="#e8452c"/>
+<text x="764.5" y="646.0" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-size="50" font-weight="bold" text-anchor="middle">STOP</text>
+<text x="764.5" y="555.6" fill="#5b636c" font-family="DejaVu Sans, Arial, sans-serif" font-size="36" text-anchor="middle">REC · 0.0 s</text>
+<text x="58" y="110.7" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">BOOST</text>
+<text x="58" y="156.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="40" font-weight="bold" text-anchor="start">0.01</text>
+<text x="58" y="201.7" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">FUEL PRESS</text>
+<text x="58" y="247.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="40" font-weight="bold" text-anchor="start">38</text>
+<text x="58" y="292.7" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">INTAKE</text>
+<text x="58" y="338.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="40" font-weight="bold" text-anchor="start">28</text>
+<text x="58" y="383.7" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">EGT</text>
+<text x="58" y="429.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="40" font-weight="bold" text-anchor="start">480</text>
+<text x="58" y="474.7" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" text-anchor="start">SPEED</text>
+<text x="58" y="520.6" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="40" font-weight="bold" text-anchor="start">0</text>
+<text x="1536" y="121.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="37" text-anchor="start">0-100</text>
+<text x="1536" y="217.8" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="80" font-weight="bold" text-anchor="start">0.00 sec</text>
+<text x="1536" y="274.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="37" text-anchor="start">0-200</text>
+<text x="1536" y="370.8" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="80" font-weight="bold" text-anchor="start">0.00 sec</text>
+<text x="1536" y="427.3" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="37" text-anchor="start">100-200</text>
+<text x="1536" y="523.8" fill="#eef1f4" font-family="DejaVu Sans, Arial, sans-serif" font-size="80" font-weight="bold" text-anchor="start">0.00 sec</text>
+</svg>
