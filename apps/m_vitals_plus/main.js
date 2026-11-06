@@ -30,23 +30,25 @@ var PEAK_RESET_MS = 6000;      // peak power/torque reset interval (setting late
 var CHART_WINDOW_S = 30;       // rolling window of the power/torque chart
 var LIVE_WINDOW_S = 20;        // rolling window of the live hpfp/ignition charts
 
+/* Tab ids are stable; the visible label is translated via i18n (key tab_*). */
 var TABS = [
-  { id: "main",  label: "MAIN" },
-  { id: "power", label: "POWER" },
-  { id: "hpfp",  label: "HPFP" },
-  { id: "ign",   label: "IGNITION" },
-  { id: "fuelcool", label: "FUEL/COOL" },
-  { id: "elec",  label: "ELECTRIC" },
-  { id: "tcase", label: "TCASE" },
-  { id: "lap",   label: "LAP" }
+  { id: "main",  key: "tab_main" },
+  { id: "power", key: "tab_power" },
+  { id: "hpfp",  key: "tab_hpfp" },
+  { id: "ign",   key: "tab_ign" },
+  { id: "fuelcool", key: "tab_fuelcool" },
+  { id: "elec",  key: "tab_elec" },
+  { id: "tcase", key: "tab_tcase" },
+  { id: "lap",   key: "tab_lap" },
+  { id: "settings", key: "tab_settings" }
 ];
 
 /* ELECTRIC tab ("Бортовая сеть"): four tiles in a 2x2 grid. */
 var ELEC_TILES = [
-  { key: "voltage",  label: "VOLTAGE",     unit: "V", dp: 1 },
-  { key: "alternatorTemp", label: "ALT TEMP", unit: "\u00b0C", dp: 0 },
-  { key: "alternatorLoad", label: "ALT LOAD", unit: "%", dp: 0, bar: true },
-  { key: "currentOut", label: "OUTPUT",     unit: "A", dp: 0 }
+  { key: "voltage",  labelKey: "t_voltage",     unit: "V", dp: 1 },
+  { key: "alternatorTemp", labelKey: "t_alttemp", unit: "\u00b0C", dp: 0 },
+  { key: "alternatorLoad", labelKey: "t_altload", unit: "%", dp: 0, bar: true },
+  { key: "currentOut", labelKey: "t_output",     unit: "A", dp: 0 }
 ];
 
 /* FUEL/COOL tab ("Система топлива и охлаждения"): six tiles in a 3x2 grid.
@@ -55,22 +57,22 @@ var ELEC_TILES = [
  * cluster module over K-CAN) — they show "--" until a working DID is probed
  * on the car or a dedicated source is wired in. */
 var FUELCOOL_TILES = [
-  { key: "fuelTemp",    label: "FUEL TEMP",     unit: "\u00b0C", dp: 0 },
-  { key: "oilQuality",  label: "OIL QUALITY",   unit: "%",     dp: 0, bar: true },
-  { key: "oilLevel",    label: "OIL LEVEL",     unit: "%",     dp: 0, bar: true },
-  { key: "thermoPos",   label: "THERMOSTAT",    unit: "%",     dp: 0, bar: true },
-  { key: "fanRpm",      label: "FAN",           unit: "rpm",   dp: 0 },
-  { key: "radTemp",     label: "RADIATOR",      unit: "\u00b0C", dp: 0 }
+  { key: "fuelTemp",    labelKey: "t_fueltemp",     unit: "\u00b0C", dp: 0 },
+  { key: "oilQuality",  labelKey: "t_oilqual",   unit: "%",     dp: 0, bar: true },
+  { key: "oilLevel",    labelKey: "t_oillvl",     unit: "%",     dp: 0, bar: true },
+  { key: "thermoPos",   labelKey: "t_thermo",    unit: "%",     dp: 0, bar: true },
+  { key: "fanRpm",      labelKey: "t_fan",           unit: "rpm",   dp: 0 },
+  { key: "radTemp",     labelKey: "t_rad",      unit: "\u00b0C", dp: 0 }
 ];
 
 /* Lap tab: acceleration time targets (km/h) and the live side metrics */
 var LAP_TARGETS = [100, 200];
 var LAP_METRICS = [
-  { key: "boost",    label: "BOOST" },
-  { key: "fuelPres", label: "FUEL PRESS" },
-  { key: "iat",      label: "INTAKE" },
-  { key: "egt",      label: "EGT" },
-  { key: "speed",    label: "SPEED" }
+  { key: "boost",    labelKey: "t_boost" },
+  { key: "fuelPres", labelKey: "t_fuelpress" },
+  { key: "iat",      labelKey: "t_intake" },
+  { key: "egt",      labelKey: "t_egt" },
+  { key: "speed",    labelKey: "t_speed" }
 ];
 
 /* Tile labels. The M logo is drawn in the centre cell of the main grid, so
@@ -79,20 +81,20 @@ var LAP_METRICS = [
  * Units are intentionally not rendered for now; they will become a
  * user-facing setting later. */
 var PRIMARY_TILES = [
-  { key: "boost",    label: "BOOST",     unit: "bar", dp: 2 },
-  { key: "iat",      label: "INTAKE",    unit: "\u00b0C", dp: 0 },
-  { key: "egt",      label: "EGT",       unit: "\u00b0C", dp: 0 },
-  { key: "oilPress", label: "OIL PRESS", unit: "bar", dp: 1 },
-  { key: "lambda",   label: "MIXTURE",   unit: "",    dp: 2 },
-  { key: "coolant",  label: "COOLANT",   unit: "\u00b0C", dp: 0 },
-  { key: "oilTemp",  label: "OIL TEMP",  unit: "\u00b0C", dp: 0 }
+  { key: "boost",    labelKey: "t_boost",     unit: "bar", dp: 2 },
+  { key: "iat",      labelKey: "t_intake",    unit: "\u00b0C", dp: 0 },
+  { key: "egt",      labelKey: "t_egt",       unit: "\u00b0C", dp: 0 },
+  { key: "oilPress", labelKey: "t_oilpress", unit: "bar", dp: 1 },
+  { key: "lambda",   labelKey: "t_mix",   unit: "",    dp: 2 },
+  { key: "coolant",  labelKey: "t_coolant",   unit: "\u00b0C", dp: 0 },
+  { key: "oilTemp",  labelKey: "t_oiltemp",  unit: "\u00b0C", dp: 0 }
 ];
 
 var SECONDARY_TILES = [
-  { key: "voltage",  label: "BATTERY",   unit: "V",  dp: 1 },
-  { key: "gearbox",  label: "GEARBOX",   unit: "\u00b0C", dp: 0 },
-  { key: "knock",    label: "KNOCK",     unit: "",   dp: 0, counter: true },
-  { key: "misfire",  label: "MISFIRES",  unit: "",   dp: 0, counter: true }
+  { key: "voltage",  labelKey: "t_batt",   unit: "V",  dp: 1 },
+  { key: "gearbox",  labelKey: "t_gearbox",   unit: "\u00b0C", dp: 0 },
+  { key: "knock",    labelKey: "t_knock",     unit: "",   dp: 0, counter: true },
+  { key: "misfire",  labelKey: "t_misf",  unit: "",   dp: 0, counter: true }
 ];
 
 /* Main-screen layout (VMG reference): 4 rows x 3 columns, the centre cell
@@ -217,7 +219,7 @@ var tcaseLive = {
 /* ------------------------------------------------------------------ */
 
 var ALL_TILES = PRIMARY_TILES.concat(SECONDARY_TILES, FUELCOOL_TILES, ELEC_TILES, [
-  { key: "rpm", label: "RPM", unit: "", dp: 0 }
+  { key: "rpm", labelKey: "t_rpm", unit: "", dp: 0 }
 ]);
 
 function num(x) { return typeof x === "number" && isFinite(x); }
@@ -227,11 +229,194 @@ function tileByKey(key) {
   return null;
 }
 
+/* ------------------------------------------------------------------ */
+/* i18n + unit conversion                                             */
+/* ------------------------------------------------------------------ */
+
+var I18N = {
+  en: {
+    tab_main: "MAIN", tab_power: "POWER", tab_hpfp: "HPFP", tab_ign: "IGNITION",
+    tab_fuelcool: "FUEL/COOL", tab_elec: "ELECTRIC", tab_tcase: "TCASE",
+    tab_lap: "LAP", tab_settings: "SETTINGS",
+    t_boost: "BOOST", t_intake: "INTAKE", t_egt: "EGT", t_oilpress: "OIL PRESS",
+    t_mix: "MIXTURE", t_coolant: "COOLANT", t_oiltemp: "OIL TEMP", t_batt: "BATTERY",
+    t_gearbox: "GEARBOX", t_knock: "KNOCK", t_misf: "MISFIRES", t_rpm: "RPM",
+    t_voltage: "VOLTAGE", t_alttemp: "ALT TEMP", t_altload: "ALT LOAD", t_output: "OUTPUT",
+    t_fueltemp: "FUEL TEMP", t_oilqual: "OIL QUALITY", t_oillvl: "OIL LEVEL",
+    t_thermo: "THERMOSTAT", t_fan: "FAN", t_rad: "RADIATOR",
+    t_fuelpress: "FUEL PRESS", t_speed: "SPEED",
+    s_language: "Language", s_unitsTemp: "Temperature units", s_unitsSpeed: "Speed units",
+    s_showUnits: "Show units on tiles", s_peakReset: "Peak reset interval",
+    s_boostSource: "Boost source", s_demo: "Demo mode", s_pollRate: "DME poll rate",
+    v_en: "English", v_ru: "\u0420\u0443\u0441\u0441\u043a\u0438\u0439",
+    v_celsius: "\u00b0C", v_fahrenheit: "\u00b0F", v_kmh: "km/h", v_mph: "mph",
+    v_on: "ON", v_off: "OFF", v_auto: "AUTO",
+    u_degC: "\u00b0C", u_degF: "\u00b0F", u_bar: "bar", u_volt: "V", u_pct: "%",
+    u_rpm: "rpm", u_amp: "A", u_kmh: "km/h", u_mph: "mph",
+    u_ps: "hp", u_kw: "kW", u_nm: "Nm", u_lbft: "lb-ft", u_sec: "sec",
+    l_peak: "PEAK", l_start: "START", l_stop: "STOP", l_details: "DETAILS",
+    l_back: "< BACK", l_rec: "REC", l_runComplete: "RUN COMPLETE",
+    l_speedZero: "SPEED MUST BE 0 TO START",
+    l_powerTorque: "Power & Torque during run", l_hpfpRail: "HPFP rail pressure",
+    l_ignLoad: "Ignition timing under load",
+    l_maxRailAct: "MAX RAIL ACTUAL", l_maxRailReq: "MAX RAIL REQUESTED",
+    l_maxAdv: "MAX ADVANCE", l_maxRet: "MAX RETARD",
+    l_knockEvents: "KNOCK EVENTS", l_misfiresLoad: "MISFIRES LOAD",
+    l_peakPower: "PEAK POWER", l_peakTorque: "PEAK TORQUE",
+    c_actual: "actual", c_requested: "requested", c_advance: "advance",
+    c_retard: "retard", c_lockup: "lock-up",
+    ch_powerTorque: "Power & Torque, last 30 s",
+    ch_hpfp: "HPFP rail pressure, live",
+    ch_ign: "Ignition timing, live",
+    ch_tcase: "Transfer-case lock-up, live",
+    st_thermostat: "THERMOSTAT OPEN", st_fanSpeed: "FAN SPEED",
+    st_railActual: "RAIL ACTUAL", st_railRequested: "RAIL REQ",
+    st_lockPct: "LOCK-UP", st_frontShare: "FRONT SHARE",
+    st_current: "CURRENT", st_battery: "BATTERY", st_alternator: "ALTERNATOR",
+    st_power: "POWER", st_torque: "TORQUE",
+    st_loadPct: "LOAD", st_temp: "TEMP", st_voltage: "VOLTAGE",
+    g_left: "LEFT", g_right: "RIGHT", g_now: "NOW",
+    n_settings: "SETTINGS",
+    n_appearance: "APPEARANCE", n_data: "DATA", n_saved: "SAVED",
+    hint_saved: "\u2713 saved"
+  },
+  ru: {
+    tab_main: "\u041e\u0441\u043d.", tab_power: "\u041c\u043e\u0449\u043d.",
+    tab_hpfp: "\u0422\u041d\u0412\u0414", tab_ign: "\u0417\u0430\u0436\u0438\u0433.",
+    tab_fuelcool: "\u0422\u041e\u041f\u041b\u0418\u0412\u041e", tab_elec: "\u0421\u0415\u0422\u042c",
+    tab_tcase: "\u0420\u0410\u0417\u0414", tab_lap: "\u0417\u0410\u041c\u0415\u0420",
+    tab_settings: "\u041d\u0410\u0421\u0422\u0420",
+    t_boost: "\u041d\u0410\u0414\u0414\u0423\u0412", t_intake: "\u0412\u041f\u0423\u0421\u041a",
+    t_egt: "\u0412\u042b\u0425\u041b\u041e\u041f", t_oilpress: "\u041c\u0410\u0421\u041b\u041e \u0414",
+    t_mix: "\u0421\u041c\u0415\u0421\u042c", t_coolant: "\u0410\u041d\u0422\u0418\u0424\u0420",
+    t_oiltemp: "\u041c\u0410\u0421\u041b\u041e \u0422", t_batt: "\u0410\u041a\u0411",
+    t_gearbox: "\u0410\u041a\u041f\u041f", t_knock: "\u0414\u0415\u0422\u041e\u041d",
+    t_misf: "\u041f\u0420\u041e\u041f\u0423\u0421\u041a", t_rpm: "\u041e\u0411/\u041c\u0418\u041d",
+    t_voltage: "\u041d\u0410\u041f\u0420\u042f\u0416", t_alttemp: "\u0413\u0415\u041d \u0422",
+    t_altload: "\u041d\u0410\u0413\u0420\u0423\u0417\u041a\u0410", t_output: "\u041e\u0422\u0414\u0410\u0427\u0410",
+    t_fueltemp: "\u0422\u041e\u041f\u041b\u0418\u0412\u041e", t_oilqual: "\u041c\u0410\u0421\u041b\u041e \u041a",
+    t_oillvl: "\u0423\u0420\u041e\u0412\u0415\u041d\u042c", t_thermo: "\u0422\u0415\u0420\u041c\u041e",
+    t_fan: "\u0412\u0415\u041d\u0422", t_rad: "\u0420\u0410\u0414\u0418\u0410\u0422",
+    t_fuelpress: "\u0422\u041d\u0412\u0414", t_speed: "\u0421\u041a\u041e\u0420\u041e\u0421\u0422\u042c",
+    s_language: "\u042f\u0437\u044b\u043a", s_unitsTemp: "\u0415\u0434. \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b",
+    s_unitsSpeed: "\u0415\u0434. \u0441\u043a\u043e\u0440\u043e\u0441\u0442\u0438", s_showUnits: "\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0435\u0434\u0438\u043d\u0438\u0446\u044b",
+    s_peakReset: "\u0421\u0431\u0440\u043e\u0441 \u043f\u0438\u043a\u043e\u0432",
+    s_boostSource: "\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u043d\u0430\u0434\u0434\u0443\u0432\u0430",
+    s_demo: "\u0414\u0435\u043c\u043e-\u0440\u0435\u0436\u0438\u043c", s_pollRate: "\u041e\u043f\u0440\u043e\u0441 DME",
+    v_en: "English", v_ru: "\u0420\u0443\u0441\u0441\u043a\u0438\u0439",
+    v_celsius: "\u00b0C", v_fahrenheit: "\u00b0F", v_kmh: "\u043a\u043c/\u0447", v_mph: "\u043c\u0438\u043b\u044c/\u0447",
+    v_on: "\u0412\u041a\u041b", v_off: "\u0412\u042b\u041a\u041b", v_auto: "\u0410\u0412\u0422\u041e",
+    u_degC: "\u00b0C", u_degF: "\u00b0F", u_bar: "\u0431\u0430\u0440", u_volt: "\u0412",
+    u_pct: "%", u_rpm: "\u043e\u0431/\u043c\u0438\u043d", u_amp: "\u0410",
+    u_kmh: "\u043a\u043c/\u0447", u_mph: "\u043c\u0438\u043b\u044c/\u0447",
+    u_ps: "\u043b.\u0441.", u_kw: "\u043a\u0412\u0442", u_nm: "\u041d\u043c", u_lbft: "\u0444\u0443\u0442-\u0444",
+    u_sec: "\u0441\u0435\u043a",
+    l_peak: "\u041f\u0418\u041a", l_start: "\u0421\u0422\u0410\u0420\u0422", l_stop: "\u0421\u0422\u041e\u041f",
+    l_details: "\u0414\u0415\u0422\u0410\u041b\u0418", l_back: "< \u041d\u0410\u0417\u0410\u0414",
+    l_rec: "\u0417\u0410\u041f\u0418\u0421\u042c", l_runComplete: "\u0417\u0410\u041c\u0415\u0420 \u0417\u0410\u0412\u0415\u0420\u0428\u0401\u041d",
+    l_speedZero: "\u0421\u0422\u0410\u0420\u0422 \u0422\u041e\u041b\u042c\u041a\u041e \u041f\u0420\u0418 \u0421\u0422\u041e\u042f\u041d\u041a\u0415",
+    l_powerTorque: "\u041c\u043e\u0449\u043d\u043e\u0441\u0442\u044c \u0438 \u043c\u043e\u043c\u0435\u043d\u0442 \u0437\u0430 \u0437\u0430\u043c\u0435\u0440",
+    l_hpfpRail: "\u0414\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0422\u041d\u0412\u0414",
+    l_ignLoad: "\u0423\u0433\u043b\u044b \u0417\u0430\u0436\u0438\u0433\u0430\u043d\u0438\u044f \u043f\u043e\u0434 \u043d\u0430\u0433\u0440\u0443\u0437\u043a\u043e\u0439",
+    l_maxRailAct: "\u041c\u0410\u041a\u0421 \u0424\u0410\u041a\u0422", l_maxRailReq: "\u041c\u0410\u041a\u0421 \u0417\u0410\u041f\u0420",
+    l_maxAdv: "\u041c\u0410\u041a\u0421 \u0423\u0413\u041e\u041b", l_maxRet: "\u041c\u0410\u041a\u0421 \u041e\u041f\u0417\u0414",
+    l_knockEvents: "\u0414\u0415\u0422\u041e\u041d\u0410\u0426\u0418\u0418", l_misfiresLoad: "\u041f\u0420\u041e\u041f\u0423\u0421\u041a\u0418",
+    l_peakPower: "\u041f\u0418\u041a \u041c\u041e\u0429\u041d", l_peakTorque: "\u041f\u0418\u041a \u041c\u041e\u041c\u0415\u041d\u0422",
+    c_actual: "\u0444\u0430\u043a\u0442", c_requested: "\u0437\u0430\u043f\u0440", c_advance: "\u0443\u0433\u043e\u043b",
+    c_retard: "\u043e\u043f\u0437\u0434", c_lockup: "\u0431\u043b\u043e\u043a",
+    ch_powerTorque: "\u041c\u043e\u0449\u043d\u043e\u0441\u0442\u044c / \u043c\u043e\u043c\u0435\u043d\u0442, 30 \u0441",
+    ch_hpfp: "\u0422\u041d\u0412\u0414, \u043e\u043d\u043b\u0430\u0439\u043d",
+    ch_ign: "\u0417\u0430\u0436\u0438\u0433\u0430\u043d\u0438\u0435, \u043e\u043d\u043b\u0430\u0439\u043d",
+    ch_tcase: "\u0411\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u043a\u0430 \u0440\u0430\u0437\u0434\u0430\u0442\u043a\u0438",
+    st_thermostat: "\u0422\u0415\u0420\u041c\u041e\u0421\u0422\u0410\u0422", st_fanSpeed: "\u0412\u0415\u041d\u0422\u0418\u041b\u042f\u0422\u041e\u0420",
+    st_railActual: "\u0424\u0410\u041a\u0422", st_railRequested: "\u0417\u0410\u041f\u0420",
+    st_lockPct: "\u0411\u041b\u041e\u041a", st_frontShare: "\u041f\u0415\u0420\u0415\u0414",
+    st_current: "\u0422\u041e\u041a", st_battery: "\u0410\u041a\u0411", st_alternator: "\u0413\u0415\u041d\u0415\u0420\u0410\u0422\u041e\u0420",
+    st_power: "\u041c\u041e\u0429\u041d\u041e\u0421\u0422\u042c", st_torque: "\u041c\u041e\u041c\u0415\u041d\u0422",
+    st_loadPct: "\u041d\u0410\u0413\u0420", st_temp: "\u0422\u0415\u041c\u041f", st_voltage: "\u041d\u0410\u041f\u0420\u042f\u0416",
+    g_left: "\u0421\u041b\u0415\u0412\u0410", g_right: "\u0421\u041f\u0420\u0410\u0412\u0410", g_now: "\u0421\u0415\u0419\u0427\u0410\u0421",
+    n_settings: "\u041d\u0410\u0421\u0422\u0420\u041e\u0419\u041a\u0418",
+    n_appearance: "\u0412\u041d\u0415\u0428\u041d\u0418\u0419 \u0412\u0418\u0414", n_data: "\u0414\u0410\u041d\u041d\u042b\u0415",
+    n_saved: "\u0421\u041e\u0425\u0420\u0410\u041d\u0415\u041d\u041e",
+    hint_saved: "\u2713 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e"
+  }
+};
+
+function lang() { return (gSettings && gSettings.language === "ru") ? "ru" : "en"; }
+
+function tr(key) {
+  var d = I18N[lang()] || I18N.en;
+  if (d[key]) return d[key];
+  return I18N.en[key] !== undefined ? I18N.en[key] : key;
+}
+
+/* tile label helper: translated when a labelKey is present */
+function tl(item) { return item.labelKey ? tr(item.labelKey) : (item.label || ""); }
+
+/* ---- unit conversion layer ------------------------------------------------
+ * The data pipeline always stores SI-ish canonical values:
+ *   temperatures in degC, speed in km/h, power in metric hp (PS), torque in Nm.
+ * Display goes through conv()/unitFor(), which apply the user settings
+ * unitsTemp (C|F) and unitsSpeed (kmh|mph). Boost (bar), pressure (bar),
+ * lambda, %, V, A, rpm are locale-neutral and pass through unchanged.       */
+
+function tempUnit() { return (gSettings && gSettings.unitsTemp === "F") ? "F" : "C"; }
+function speedUnit() { return (gSettings && gSettings.speedUnits === "mph") ? "mph" : "kmh"; }
+
+function conv(key, val) {
+  if (!num(val)) return val;
+  switch (key) {
+    case "iat": case "egt": case "coolant": case "oilTemp": case "gearbox":
+    case "fuelTemp": case "radTemp": case "alternatorTemp":
+      return tempUnit() === "F" ? val * 9 / 5 + 32 : val;
+    case "speed":
+      return speedUnit() === "mph" ? val * 0.621371 : val;
+  }
+  return val;
+}
+
+function unitFor(key) {
+  switch (key) {
+    case "iat": case "egt": case "coolant": case "oilTemp": case "gearbox":
+    case "fuelTemp": case "radTemp": case "alternatorTemp":
+      return tempUnit() === "F" ? tr("u_degF") : tr("u_degC");
+    case "boost": case "oilPress": case "fuelPres": case "fuelPresAct": case "fuelPresReq":
+      return tr("u_bar");
+    case "voltage": return tr("u_volt");
+    case "currentOut": return tr("u_amp");
+    case "lambda": return "";                       // dimensionless ratio
+    case "knock": case "misfire": return "";         // counters
+    case "speed": return speedUnit() === "mph" ? tr("u_mph") : tr("u_kmh");
+    case "fanRpm": case "rpm": return tr("u_rpm");
+    case "thermoPos": case "oilQuality": case "oilLevel": case "alternatorLoad":
+    case "tcLockPct":
+      return tr("u_pct");
+  }
+  return "";
+}
+
+function showUnits() { return !!(gSettings && gSettings.showUnits); }
+
 function fmt(key, val) {
   var tile = tileByKey(key);
   if (!num(val)) return "--";
   var dp = tile ? tile.dp : 1;
-  return val.toFixed(dp);
+  var out = conv(key, val).toFixed(dp);
+  if (showUnits()) {
+    var u = unitFor(key);
+    if (u) out += " " + u;
+  }
+  return out;
+}
+
+/* lap-tab thresholds: stored in km/h; converted to the display unit for the
+ * labels, while crossing detection keeps comparing in km/h internally. */
+function lapTargetLabel(tgt) {
+  var d = conv("speed", tgt);
+  return (tgt === 100 ? "0-" : tgt === 200 ? "0-" : "") + Math.round(d);
+}
+function lapRangeLabel(a, b) {
+  return Math.round(conv("speed", a)) + "-" + Math.round(conv("speed", b));
 }
 
 function isFresh(key) {
@@ -439,7 +624,7 @@ function drawTabs(ctx) {
     ctx.textBaseline = "middle";
     ctx.font = (active ? "bold " : "") + Math.round(tabH * 0.38) + "px sans-serif";
     ctx.fillStyle(active ? c("accent") : c("textSecondary"));
-    ctx.fillText(t.label, x + w / 2, tabH * 0.45);
+    ctx.fillText(tr(t.key), x + w / 2, tabH * 0.45);
     if (active) {
       ctx.fillStyle(c("accent"));
       ctx.fillRect(x + w * 0.15, tabH - 4, w * 0.7, 4);
@@ -462,7 +647,7 @@ function drawTile(ctx, x, y, tw, th, tile, val) {
   ctx.textBaseline = "top";
   ctx.font = Math.round(th * 0.15) + "px sans-serif";
   ctx.fillStyle(c("textSecondary"));
-  ctx.fillText(tile.label, x + pad, y + pad * 0.7);
+  ctx.fillText(tl(tile), x + pad, y + pad * 0.7);
 
   // value only — units are intentionally hidden for now (they live in the
   // tile config and will become a user-facing setting later)
@@ -640,6 +825,12 @@ function drawPlaceholder(ctx, top, text) {
 var COL_POWER = "#e8452c";   // power curve (red)
 var COL_TORQUE = "#3aa0ff";  // torque curve (blue)
 
+/* Power tab: current + peak power/torque. Values are canonical (hp/Nm);
+ * the display converts through powerVal()/torqueVal() so a future hp/kW or
+ * Nm/lb-ft setting plugs in at these two helpers only. */
+function powerDisp(v) { return num(v) ? Math.round(v) : null; }
+function torqueDisp(v) { return num(v) ? Math.round(v) : null; }
+
 function drawPower(ctx, top) {
   var area = gH - top;
   var numH = Math.round(area * 0.34);
@@ -647,9 +838,9 @@ function drawPower(ctx, top) {
 
   // two big number tiles: Power / Torque with current + peak lines
   var half = Math.floor(gW / 2);
-  drawPowerTile(ctx, 0, top, half, numH, "Power", "hp",
+  drawPowerTile(ctx, 0, top, half, numH, tr("st_power"), "hp",
     fresh ? power.hp : null, fresh ? power.peakHp : null, COL_POWER);
-  drawPowerTile(ctx, half, top, gW - half, numH, "Torque", "nm",
+  drawPowerTile(ctx, half, top, gW - half, numH, tr("st_torque"), "nm",
     fresh ? power.nm : null, fresh ? power.peakNm : null, COL_TORQUE);
 
   drawPowerChart(ctx, 0, top + numH, gW, area - numH);
@@ -669,8 +860,8 @@ function drawPowerTile(ctx, x, y, tw, th, label, kind, cur, peak, col) {
   // big current value
   ctx.font = "bold " + Math.round(th * 0.42) + "px sans-serif";
   ctx.fillStyle(num(cur) ? col : c("textTertiary"));
-  var txt = num(cur) ? String(Math.round(cur)) : "--";
-  var unit = kind === "hp" ? "hp" : "Nm";
+  var txt = num(cur) ? String(kind === "hp" ? powerDisp(cur) : torqueDisp(cur)) : "--";
+  var unit = kind === "hp" ? tr("u_ps") : tr("u_nm");
   ctx.fillText(txt, x + pad, y + th * 0.30);
   ctx.font = Math.round(th * 0.20) + "px sans-serif";
   ctx.fillStyle(c("textSecondary"));
@@ -680,7 +871,7 @@ function drawPowerTile(ctx, x, y, tw, th, label, kind, cur, peak, col) {
   // peak line under the number
   ctx.font = Math.round(th * 0.17) + "px sans-serif";
   ctx.fillStyle(num(peak) ? col : c("textTertiary"));
-  var ptxt = "PEAK " + (num(peak) ? String(Math.round(peak)) + " " + unit : "--");
+  var ptxt = tr("l_peak") + " " + (num(peak) ? String(kind === "hp" ? powerDisp(peak) : torqueDisp(peak)) + " " + unit : "--");
   ctx.fillText(ptxt, x + pad, y + th * 0.76);
 
   // countdown ticks: shows when the peak will expire (visual only)
@@ -855,9 +1046,12 @@ function liveStep() {
 }
 
 /* generic rolling live chart: hist entries {t, <keys>}; series keys can be
- * negative-valued (retard) — the y range is derived from the window data. */
+ * negative-valued (retard) — the y range is derived from the window data.
+ * opts.convert: optional canonical->display value mapper (temperature and
+ * speed series re-scale with the unit settings). */
 function drawLiveChart(ctx, x, y, w, h, title, hist, series, opts) {
   opts = opts || {};
+  var cv = opts.convert || function (vv) { return vv; };
   ctx.fillStyle(c("surface"));
   ctx.fillRoundRect(x + 4, y + 4, w - 8, h - 8, 12);
 
@@ -875,7 +1069,7 @@ function drawLiveChart(ctx, x, y, w, h, title, hist, series, opts) {
   for (var s = 0; s < series.length; s++) {
     var key = series[s].key;
     for (var j = 0; j < hist.length; j++) {
-      var val = hist[j][key];
+      var val = cv(hist[j][key]);
       if (!num(val) || hist[j].t < t0) continue;
       if (lo === null || val < lo) lo = val;
       if (hi === null || val > hi) hi = val;
@@ -935,7 +1129,7 @@ function drawLiveChart(ctx, x, y, w, h, title, hist, series, opts) {
     var started = false, lastPx = 0, lastPy = 0;
     for (var p = 0; p < hist.length; p++) {
       var pt = hist[p];
-      var pv = pt[se.key];
+      var pv = cv(pt[se.key]);
       if (!num(pv) || pt.t < t0) { started = false; continue; }
       var px = gx + gw * (pt.t - t0) / (now - t0);
       var py = gy + gh - gh * (pv - lo) / (hi - lo);
@@ -975,18 +1169,19 @@ function drawHpfpTab(ctx, top) {
   var cw = Math.floor((gW - 2 * padX) / 3);
   var curA = fuelPressureActual(), curR = fuelPressureRequested();
   var sy = top + Math.round(statsH * 0.10);
-  drawLiveStat(ctx, padX, sy, cw, statsH, "RAIL ACTUAL, bar",
+  var uB = tr("u_bar");
+  drawLiveStat(ctx, padX, sy, cw, statsH, tr("st_railActual") + ", " + uB,
     num(curA) ? String(Math.round(curA)) : "--", COL_FUEL_ACT, null);
-  drawLiveStat(ctx, padX + cw, sy, cw, statsH, "PEAK ACTUAL, bar",
+  drawLiveStat(ctx, padX + cw, sy, cw, statsH, tr("l_peak") + " " + tr("c_actual") + ", " + uB,
     num(hpfpLive.peakAct) ? String(Math.round(hpfpLive.peakAct)) : "--",
     COL_FUEL_ACT, hpfpLive.peakAct ? peakFrac(hpfpLive.peakActAt) : null);
-  drawLiveStat(ctx, padX + cw * 2, sy, cw, statsH, "PEAK REQUESTED, bar",
+  drawLiveStat(ctx, padX + cw * 2, sy, cw, statsH, tr("l_peak") + " " + tr("c_requested") + ", " + uB,
     num(hpfpLive.peakReq) ? String(Math.round(hpfpLive.peakReq)) : "--",
     COL_FUEL_REQ, hpfpLive.peakReq ? peakFrac(hpfpLive.peakReqAt) : null);
   drawLiveChart(ctx, padX, top + statsH, gW - 2 * padX, area - statsH,
-    "HPFP rail pressure, live", hpfpLive.hist,
-    [{ key: "act", color: COL_FUEL_ACT, label: "actual", dp: 0 },
-     { key: "req", color: COL_FUEL_REQ, label: "requested", dp: 0, dashed: true }]);
+    tr("ch_hpfp"), hpfpLive.hist,
+    [{ key: "act", color: COL_FUEL_ACT, label: tr("c_actual"), dp: 0 },
+     { key: "req", color: COL_FUEL_REQ, label: tr("c_requested"), dp: 0, dashed: true }]);
 }
 
 /* drawing: IGNITION tab (live) */
@@ -998,21 +1193,22 @@ function drawIgnTab(ctx, top) {
   var sy = top + Math.round(statsH * 0.10);
   var curAdv = isFresh("ignAdv") ? v.ignAdv : null;
   var curRet = isFresh("knockRetard") ? v.knockRetard : null;
-  drawLiveStat(ctx, padX, sy, cw, statsH, "ADVANCE NOW, deg",
+  var uD = "\u00b0";
+  drawLiveStat(ctx, padX, sy, cw, statsH, tr("c_advance") + " " + tr("g_now") + ", " + uD,
     num(curAdv) ? curAdv.toFixed(1) : "--", COL_ADV, null);
-  drawLiveStat(ctx, padX + cw, sy, cw, statsH, "MAX ADVANCE, deg",
+  drawLiveStat(ctx, padX + cw, sy, cw, statsH, tr("l_maxAdv") + ", " + uD,
     num(ignLive.maxAdv) ? ignLive.maxAdv.toFixed(1) : "--",
     COL_ADV, ignLive.maxAdv ? peakFrac(ignLive.maxAdvAt) : null);
-  drawLiveStat(ctx, padX + cw * 2, sy, cw, statsH, "MAX RETARD, deg",
+  drawLiveStat(ctx, padX + cw * 2, sy, cw, statsH, tr("l_maxRet") + ", " + uD,
     num(ignLive.maxRet) ? Math.abs(ignLive.maxRet).toFixed(1) : "--",
     COL_RET, ignLive.maxRet ? peakFrac(ignLive.maxRetAt) : null);
-  drawLiveStat(ctx, padX + cw * 3, sy, cw, statsH, "KNOCK / MISFIRE",
+  drawLiveStat(ctx, padX + cw * 3, sy, cw, statsH, tr("t_knock") + " / " + tr("t_misf"),
     counters.knock + " / " + counters.misfireCount,
     counters.knock > 0 || counters.misfireCount > 0 ? c("alert") : c("textPrimary"), null);
   drawLiveChart(ctx, padX, top + statsH, gW - 2 * padX, area - statsH,
-    "Ignition timing, live", ignLive.hist,
-    [{ key: "adv", color: COL_ADV, label: "advance, deg", dp: 1 },
-     { key: "ret", color: COL_RET, label: "retard, deg", dp: 1 }],
+    tr("ch_ign"), ignLive.hist,
+    [{ key: "adv", color: COL_ADV, label: tr("c_advance") + ", " + uD, dp: 1 },
+     { key: "ret", color: COL_RET, label: tr("c_retard") + ", " + uD, dp: 1 }],
     { zeroFloor: false });
 }
 
@@ -1025,15 +1221,15 @@ function drawTcaseTab(ctx, top) {
   var cw = Math.floor((gW - 2 * padX) / 2);
   var curLock = tcaseLockPct();
   var sy = top + Math.round(statsH * 0.10);
-  drawLiveStat(ctx, padX, sy, cw, statsH, "LOCK-UP, %",
+  drawLiveStat(ctx, padX, sy, cw, statsH, tr("st_lockPct") + ", " + tr("u_pct"),
     num(curLock) ? String(Math.round(curLock)) : "--", COL_LOCK, null);
   // front/rear torque split hint: xDrive maps lock-up onto a 0..50% front share
   var front = num(curLock) ? Math.round(50 * curLock / 100) : null;
-  drawLiveStat(ctx, padX + cw, sy, cw, statsH, "FRONT TORQUE SHARE, %",
+  drawLiveStat(ctx, padX + cw, sy, cw, statsH, tr("st_frontShare") + ", " + tr("u_pct"),
     num(front) ? String(front) : "--", c("textPrimary"), null);
   drawLiveChart(ctx, padX, top + statsH, gW - 2 * padX, area - statsH,
-    "Transfer case lock-up, live", tcaseLive.hist,
-    [{ key: "lock", color: COL_LOCK, label: "lock-up, %", dp: 0 }],
+    tr("ch_tcase"), tcaseLive.hist,
+    [{ key: "lock", color: COL_LOCK, label: tr("c_lockup") + ", " + tr("u_pct"), dp: 0 }],
     { zeroFloor: true });
 }
 
@@ -1258,19 +1454,19 @@ var COL_ADV = "#1aa05a";  // ignition advance
 var COL_RET = "#e8452c";  // knock retard
 var COL_LOCK = "#f0a030"; // transfer-case lock-up % (amber)
 
-function lapHistMax(key) {
+function lapHistMax(key, cv) {
   var m = null;
   for (var i = 0; i < lap.hist.length; i++) {
-    var val = lap.hist[i][key];
+    var val = cv ? cv(lap.hist[i][key]) : lap.hist[i][key];
     if (num(val) && (m === null || val > m)) m = val;
   }
   return m;
 }
 
-function lapHistMin(key) {
+function lapHistMin(key, cv) {
   var m = null;
   for (var i = 0; i < lap.hist.length; i++) {
-    var val = lap.hist[i][key];
+    var val = cv ? cv(lap.hist[i][key]) : lap.hist[i][key];
     if (num(val) && (m === null || val < m)) m = val;
   }
   return m;
@@ -1323,6 +1519,7 @@ function drawDetailTabs(ctx, top) {
  * elapsed seconds of the run; series = [{key, color, label}]. */
 function drawLapChart(ctx, x, y, w, h, title, series, opts) {
   opts = opts || {};
+  var cv = opts.convert || function (vv) { return vv; };
   ctx.fillStyle(c("surface"));
   ctx.fillRoundRect(x + 4, y + 4, w - 8, h - 8, 12);
 
@@ -1345,7 +1542,7 @@ function drawLapChart(ctx, x, y, w, h, title, series, opts) {
   for (var s = 0; s < series.length; s++) {
     var key = series[s].key;
     for (var j = 0; j < lap.hist.length; j++) {
-      var val = lap.hist[j][key];
+      var val = cv(lap.hist[j][key]);
       if (!num(val)) continue;
       if (lo === null || val < lo) lo = val;
       if (hi === null || val > hi) hi = val;
@@ -1406,7 +1603,7 @@ function drawLapChart(ctx, x, y, w, h, title, series, opts) {
     var started = false;
     for (var p = 0; p < lap.hist.length; p++) {
       var pt = lap.hist[p];
-      var pv = pt[se.key];
+      var pv = cv(pt[se.key]);
       if (!num(pv)) { started = false; continue; }
       var px = gx + gw * pt.el / tEnd;
       var py = gy + gh - gh * (pv - lo) / (hi - lo);
