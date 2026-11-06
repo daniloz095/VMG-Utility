@@ -49,6 +49,7 @@ var TABS = [
 var MORE_TABS = [
   { id: "boost", key: "m_boost" },
   { id: "gearcorr", key: "m_gearcorr" },
+  { id: "exhaust", key: "m_exhaust" },
   { id: "logs",  key: "m_logs" },
   { id: "profiles", key: "m_profiles" }
 ];
@@ -264,6 +265,26 @@ var gearCorr = {
   curStart: null          // in-progress event start timestamp
 };
 
+/* MORE -> EXHAUST FLAP ("Engine Config"-style actuator control).
+ * The exhaust flap servo is commanded through the DME via UDS InputOutput
+ * Control (service 0x2F), routine-like DID 0464 "Klappe" on B58/DME8FF.
+ * Candidates below must be probed on the car; if none respond the buttons
+ * stay disabled and show "NO RESPONSE". Safety interlocks mirror what the
+ * OEM does for service activation: engine running + coolant warm + vehicle
+ * nearly stopped before any write is sent. State readback (flap position %)
+ * uses DID candidates from app.json config.dme.flapPos when available. */
+var FLAP_SAFE_COOLANT = 30;    // deg C minimum before we allow a write
+var FLAP_SAFE_SPEED   = 10;    // km/h maximum while commanding the flap
+var flapState = {
+  mode: "auto",            // auto | open | closed — last user command
+  posPct: null,            // actual flap position % (open=100) if readable
+  posFreshAt: 0,
+  busy: false,             // a write request is in flight
+  msg: null,               // one-line feedback shown under the buttons
+  msgAt: 0,
+  rects: []                // hit-test rects registered during drawing
+};
+
 /* MORE -> LOGGING state.
  * events: ring buffer of notable session events {t, kind, text}.
  * rows:   ring buffer of periodic data snapshots {t, <metric keys>} written
@@ -320,7 +341,13 @@ var I18N = {
     tab_main: "MAIN", tab_power: "POWER", tab_hpfp: "HPFP", tab_ign: "IGNITION",
     tab_fuelcool: "FUEL/COOL", tab_elec: "ELECTRIC", tab_tcase: "TCASE",
     tab_lap: "LAP", tab_settings: "SETTINGS", tab_more: "MORE",
-    m_boost: "BOOST GAUGE", m_gearcorr: "GEAR CORRECTIONS", m_logs: "LOGGING", m_profiles: "PROFILES",
+    m_boost: "BOOST GAUGE", m_gearcorr: "GEAR CORRECTIONS", m_exhaust: "EXHAUST FLAP", m_logs: "LOGGING", m_profiles: "PROFILES",
+    ex_title: "EXHAUST FLAP CONTROL", ex_pos: "FLAP POSITION", ex_mode: "MODE",
+    ex_auto: "AUTO", ex_open: "OPEN", ex_close: "CLOSED",
+    ex_safe: "SAFE TO COMMAND", ex_unsafeSpeed: "SPEED TOO HIGH", ex_unsafeTemp: "ENGINE COLD",
+    ex_sending: "SENDING...", ex_noResp: "NO RESPONSE - PROBE DID ON CAR",
+    ex_sentOpen: "FLAP OPEN SENT", ex_sentClose: "FLAP CLOSED SENT", ex_sentAuto: "RETURNED TO AUTO",
+    ex_note: "Command via UDS 0x2F; OEM releases the flap back to DME control on every start.",
     gc_total: "CORRECTIONS", gc_maxDip: "MAX DIP", gc_maxDur: "MAX DUR", gc_gear: "GEAR",
     gc_last: "LAST EVENTS", gc_none: "NO CORRECTIONS DETECTED", gc_reset: "RESET",
     ch_gc: "Boost vs speed, live", c_boost2: "boost", c_speed2: "speed",
@@ -386,6 +413,17 @@ var I18N = {
     tab_settings: "\u041d\u0410\u0421\u0422\u0420", tab_more: "\u0414\u041e\u041f",
     m_boost: "\u041d\u0410\u0414\u0414\u0423\u0412 (\u0428\u041a\u0410\u041b\u0410)",
     m_gearcorr: "\u041a\u041e\u0420\u0420. \u041f\u041e \u041a\u041f",
+    m_exhaust: "\u0417\u0410\u0421\u041b\u041e\u041d\u041a\u0410",
+    ex_title: "\u0423\u041f\u0420\u0410\u0412\u041b\u0415\u041d\u0418\u0415 \u0417\u0410\u0421\u041b\u041e\u041d\u041a\u041e\u0419",
+    ex_pos: "\u041f\u041e\u0417\u0418\u0426\u0418\u042f \u0417\u0410\u0421\u041b\u041e\u041d\u041a\u0418", ex_mode: "\u0420\u0415\u0416\u0418\u041c",
+    ex_auto: "\u0410\u0412\u0422\u041e", ex_open: "\u041e\u0422\u041a\u0420\u042b\u0422\u042c", ex_close: "\u0417\u0410\u041a\u0420\u042b\u0422\u042c",
+    ex_safe: "\u0411\u0415\u0417\u041e\u041f\u0410\u0421\u041d\u041e", ex_unsafeSpeed: "\u0421\u041a\u041e\u0420\u041e\u0421\u0422\u042c \u0412\u042b\u0421\u041e\u041a\u0410",
+    ex_unsafeTemp: "\u0414\u0412\u0418\u0413\u0410\u0422\u0415\u041b\u042c \u0425\u041e\u041b\u041e\u0414\u041d\u042b\u0419",
+    ex_sending: "\u041e\u0422\u041f\u0420\u0410\u0412\u041a\u0410...", ex_noResp: "\u041d\u0415\u0422 \u041e\u0422\u0412\u0415\u0422\u0410 - \u041f\u0420\u041e\u0412\u0415\u0420\u0418\u0422\u042c DID",
+    ex_sentOpen: "\u041e\u0422\u041a\u0420\u042b\u0422\u0418\u042c \u041e\u0422\u041f\u0420\u0410\u0412\u041b\u0415\u041d\u041e",
+    ex_sentClose: "\u0417\u0410\u041a\u0420\u042b\u0422\u042c \u041e\u0422\u041f\u0420\u0410\u0412\u041b\u0415\u041d\u041e",
+    ex_sentAuto: "\u0412\u041e\u0417\u0412\u0420\u0410\u0422 \u0412 \u0410\u0412\u0422\u041e",
+    ex_note: "\u041a\u043e\u043c\u0430\u043d\u0434\u0430 UDS 0x2F; \u043f\u0440\u0438 \u0437\u0430\u043f\u0443\u0441\u043a\u0435 \u0434\u0432\u0438\u0433\u0430\u0442\u0435\u043b\u044f DME \u0437\u0430\u0431\u0438\u0440\u0430\u0435\u0442 \u0437\u0430\u0441\u043b\u043e\u043d\u043a\u0443 \u043e\u0431\u0440\u0430\u0442\u043d\u043e.",
     gc_total: "\u041a\u041e\u0420\u0420\u0415\u041a\u0426\u0418\u0418", gc_maxDip: "\u041c\u0410\u041a\u0421 \u041f\u0420\u041e\u0421\u0410\u0414",
     gc_maxDur: "\u041c\u0410\u041a\u0421 \u0414\u041b\u0418\u0422.", gc_gear: "\u041f\u0415\u0420\u0415\u0414\u0410\u0427\u0410",
     gc_last: "\u041f\u041e\u0421\u041b\u0415\u0414\u041d\u0418\u0415", gc_none: "\u041a\u041e\u0420\u0420\u0415\u041a\u0426\u0418\u0419 \u041d\u0415\u0422",
