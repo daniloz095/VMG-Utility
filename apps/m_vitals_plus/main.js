@@ -53,6 +53,15 @@ var SECONDARY_TILES = [
   { key: "misfire",  label: "Misfires",     unit: "",     dp: 0, counter: true }
 ];
 
+/* Main-screen layout (VMG reference): 4 rows x 3 columns, the centre cell
+ * of row 2 is the logo. Each entry: [row, col, tileKey]. */
+var MAIN_LAYOUT = [
+  [0, 0, "boost"],    [0, 1, "lambda"],   [0, 2, "oilPress"],
+  [1, 0, "iat"],      [1, 1, "logo"],     [1, 2, "egt"],
+  [2, 0, "coolant"],  [2, 1, "oilTemp"],  [2, 2, "gearbox"],
+  [3, 0, "voltage"],  [3, 1, "knock"],    [3, 2, "misfire"]
+];
+
 /* ------------------------------------------------------------------ */
 /* state                                                              */
 /* ------------------------------------------------------------------ */
@@ -239,34 +248,105 @@ function drawTile(ctx, x, y, tw, th, tile, val) {
   }
 }
 
+/* Main screen: 4 rows x 3 columns per the VMG reference. The centre cell of
+ * row 2 holds the logo, everything else is a data tile. */
 function drawMain(ctx, top) {
   var area = gH - top;
-  // 7 primary tiles: 2 rows (4 + 3), then one row of 4 secondary tiles
-  var primH = area * 0.58;
-  var secH = area * 0.42;
+  var cw = Math.floor(gW / 3);
+  var rh = Math.floor(area / 4);
 
-  var cols = 4;
-  var cw = Math.floor(gW / cols);
-  var rh = Math.floor(primH / 2);
-
-  for (var i = 0; i < PRIMARY_TILES.length; i++) {
-    var t = PRIMARY_TILES[i];
-    var row = i < 4 ? 0 : 1;
-    var col = i % 4;
-    drawTile(ctx, col * cw, top + row * rh, cw, rh, t, valueFor(t.key));
+  for (var i = 0; i < MAIN_LAYOUT.length; i++) {
+    var row = MAIN_LAYOUT[i][0], col = MAIN_LAYOUT[i][1], key = MAIN_LAYOUT[i][2];
+    var x = col * cw, y = top + row * rh;
+    if (key === "logo") { drawLogo(ctx, x, y, cw, rh); continue; }
+    var t = tileByKey(key);
+    if (!t) continue;
+    var val = t.counter
+      ? (key === "knock" ? counters.knock : counters.misfireCount)
+      : valueFor(key);
+    drawTile(ctx, x, y, cw, rh, t, val);
   }
-  // empty slot in row 2 col 4: show rpm small as context
-  var xtra = { key: "rpm", label: "Engine rpm", unit: "", dp: 0 };
-  drawTile(ctx, 3 * cw, top + rh, cw, rh, xtra, num(v.rpm) ? Math.round(v.rpm) : null);
+}
 
-  var sw = Math.floor(gW / 4);
-  for (var j = 0; j < SECONDARY_TILES.length; j++) {
-    var s = SECONDARY_TILES[j];
-    var val = s.counter
-      ? (s.key === "knock" ? counters.knock : counters.misfireCount)
-      : valueFor(s.key);
-    drawTile(ctx, j * sw, top + primH, sw, secH, s, val);
+/* ------------------------------------------------------------------ */
+/* drawing: M logo (centre cell of the main grid)                      */
+/* ------------------------------------------------------------------ */
+
+function mColors() {
+  return [
+    { c: "#87c4e8", s: 0.0 },   // light blue
+    { c: "#0f96d8", s: 0.25 },  // blue
+    { c: "#e8452c", s: 0.5 },   // red
+    { c: "#1aa05a", s: 0.75 },  // green
+    { c: "#87c4e8", s: 1.0 }
+  ];
+}
+
+/* Draw one wedge of an annulus (between radii r0..r1, angles a0..a1). */
+function fillAnnulusWedge(ctx, cx, cy, r0, r1, a0, a1) {
+  ctx.beginPath();
+  ctx.arc(cx, cy, r1, a0, a1);
+  ctx.arc(cx, cy, r0, a1, a0, true);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/* Stripes inside the roundel: quarter-relative fractions of the badge. */
+var LOGO_STRIPES = [
+  { q: 0, f0: 0.00, f1: 0.20, col: 0 },  // top-left quadrant, light blue
+  { q: 0, f0: 0.20, f1: 0.40, col: 1 },  // top-left quadrant, blue
+  { q: 1, f0: 0.10, f1: 0.30, col: 2 },  // top-right quadrant, red
+  { q: 2, f0: 0.00, f1: 0.30, col: 2 },  // bottom-left quadrant, red
+  { q: 3, f0: 0.00, f1: 0.20, col: 3 },  // bottom-right quadrant, green
+  { q: 3, f0: 0.20, f1: 0.40, col: 4 }   // bottom-right quadrant, light blue
+];
+
+function drawLogo(ctx, x, y, w, h) {
+  // dark plate behind the badge, like the reference
+  ctx.fillStyle(c("background"));
+  ctx.fillRoundRect(x + 3, y + 3, w - 6, h - 6, 10);
+
+  var cx = x + w / 2, cy = y + h / 2;
+  var R = Math.min(w, h) * 0.40;         // outer radius of the roundel
+  var ringW = R * 0.16;                  // black text ring thickness
+  var innerR = R - ringW;                // radius of the striped disc
+
+  // black ring
+  ctx.fillStyle("#141414");
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.fill();
+
+  // white hairline borders (mgu-renderd: lineWidth() is a getter function)
+  var lw = Math.max(1, R * 0.02);
+  ctx.lineWidth = lw;
+  ctx.strokeStyle("#e6e6e6");
+  ctx.beginPath(); ctx.arc(cx, cy, R - lw / 2, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, innerR + lw / 2, 0, Math.PI * 2); ctx.stroke();
+
+  // inner disc: light base + M stripes as angular wedges
+  ctx.fillStyle("#dfe6ea");
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+  ctx.fill();
+
+  var mc = mColors();
+  for (var i = 0; i < LOGO_STRIPES.length; i++) {
+    var st = LOGO_STRIPES[i];
+    var qa = [-Math.PI / 2, 0, Math.PI, Math.PI / 2][st.q]; // start angle of quadrant
+    var a0 = qa + st.f0 * Math.PI / 2;
+    var a1 = qa + st.f1 * Math.PI / 2;
+    ctx.fillStyle(mc[st.col].c);
+    fillAnnulusWedge(ctx, cx, cy, 0, innerR, a0, a1);
   }
+
+  // "M" letters on the ring, top and bottom
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold " + Math.round(ringW * 0.82) + "px sans-serif";
+  ctx.fillStyle("#e6e6e6");
+  ctx.fillText("M", cx, cy - R + ringW / 2);
+  ctx.fillText("M", cx, cy + R - ringW / 2);
 }
 
 /* ------------------------------------------------------------------ */

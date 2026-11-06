@@ -58,20 +58,23 @@ function makeRecorder() {
   var st = { fillStyle: "#ffffff", strokeStyle: "#ffffff", lineWidth: 1,
              font: "16px sans-serif", textAlign: "left", textBaseline: "alphabetic" };
   function push(o) { if (rec.recording) ops.push(o); }
+  var d = { segs: [], closed: false };   // current path, for SVG replay
   var ctx = {
     setTransform: function () {}, save: function () {}, restore: function () {},
-    beginPath: function () {}, closePath: function () {}, clip: function () {},
-    moveTo: function (x, y) { push({ op: "moveTo", x: x, y: y }); },
-    lineTo: function (x, y) { push({ op: "lineTo", x: x, y: y }); },
+    beginPath: function () { d.segs = []; }, closePath: function () { d.closed = true; }, clip: function () {},
+    moveTo: function (x, y) { push({ op: "moveTo", x: x, y: y }); d.segs.push({ t: "m", x: x, y: y }); },
+    lineTo: function (x, y) { push({ op: "lineTo", x: x, y: y }); d.segs.push({ t: "l", x: x, y: y }); },
     quadraticCurveTo: function () {}, bezierCurveTo: function () {}, rect: function () {},
-    arc: function (x, y, r) {
+    arc: function (x, y, r, a0, a1, ccw) {
+      if (a0 === undefined) { a0 = 0; a1 = Math.PI * 2; }
       push({ op: "arc", x: x, y: y, r: r });
+      d.segs.push({ t: "a", x: x, y: y, r: r, a0: a0, a1: a1, ccw: !!ccw });
     },
     fillRect: function (x, y, w, h) { push({ op: "fillRect", x: x, y: y, w: w, h: h, style: st.fillStyle }); },
     strokeRect: function (x, y, w, h) { push({ op: "strokeRect", x: x, y: y, w: w, h: h, style: st.strokeStyle }); },
     fillRoundRect: function (x, y, w, h, r) { push({ op: "fillRoundRect", x: x, y: y, w: w, h: h, r: r, style: st.fillStyle }); },
-    stroke: function () { push({ op: "strokePath", style: st.strokeStyle, lw: st.lineWidth }); },
-    fill: function () { push({ op: "fillPath", style: st.fillStyle }); },
+    stroke: function () { push({ op: "strokePath", style: st.strokeStyle, lw: st.lineWidth, path: d.segs.slice(), closed: d.closed }); d.segs = []; d.closed = false; },
+    fill: function () { push({ op: "fillPath", style: st.fillStyle, path: d.segs.slice(), closed: d.closed }); d.segs = []; d.closed = false; },
     fillCircle: function (x, y, r) { push({ op: "fillCircle", x: x, y: y, r: r, style: st.fillStyle }); },
     fillText: function (t, x, y) {
       push({ op: "fillText", t: String(t), x: x, y: y, style: st.fillStyle,
@@ -251,6 +254,36 @@ function parseFont(fontStr) {
   return { size: m ? parseFloat(m[1]) : 16, bold: bold };
 }
 
+/* Convert a recorded path (moveTo/lineTo/arc segments) into SVG path data. */
+function pathD(segs, closed) {
+  var s = "";
+  for (var i = 0; i < segs.length; i++) {
+    var g = segs[i];
+    if (g.t === "m") s += "M" + g.x.toFixed(1) + " " + g.y.toFixed(1) + " ";
+    else if (g.t === "l") s += "L" + g.x.toFixed(1) + " " + g.y.toFixed(1) + " ";
+    else if (g.t === "a") {
+      var sweep = g.ccw ? 0 : 1;
+      var delta = g.ccw ? (g.a0 - g.a1) : (g.a1 - g.a0);
+      while (delta < -1e-9) delta += Math.PI * 2;
+      while (delta > Math.PI * 2 - 1e-9) delta = Math.PI * 2;   // full circle
+      var largeArc = delta > Math.PI ? 1 : 0;
+      var x0 = g.x + g.r * Math.cos(g.a0), y0 = g.y + g.r * Math.sin(g.a0);
+      var x1 = g.x + g.r * Math.cos(g.a1), y1 = g.y + g.r * Math.sin(g.a1);
+      s += "M" + x0.toFixed(1) + " " + y0.toFixed(1) + " ";
+      if (delta >= Math.PI * 2 - 1e-6) {
+        var xm = g.x + g.r * Math.cos(g.a0 + Math.PI), ym = g.y + g.r * Math.sin(g.a0 + Math.PI);
+        s += "A" + g.r.toFixed(1) + " " + g.r.toFixed(1) + " 0 1 " + sweep + " " + xm.toFixed(1) + " " + ym.toFixed(1) + " ";
+        s += "A" + g.r.toFixed(1) + " " + g.r.toFixed(1) + " 0 1 " + sweep + " " + x0.toFixed(1) + " " + y0.toFixed(1) + " ";
+      } else {
+        s += "A" + g.r.toFixed(1) + " " + g.r.toFixed(1) + " 0 " + largeArc + " " + sweep +
+             " " + x1.toFixed(1) + " " + y1.toFixed(1) + " ";
+      }
+    }
+  }
+  if (closed) s += "Z";
+  return s;
+}
+
 function svgFromOps(ops) {
   var parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + SCREEN_W +
                '" height="' + SCREEN_H + '" viewBox="0 0 ' + SCREEN_W + " " + SCREEN_H + '">'];
@@ -279,15 +312,19 @@ function svgFromOps(ops) {
                 " A" + o.r + " " + o.r + " 0 1 0 " + (o.x - o.r).toFixed(1) + " " + o.y.toFixed(1) +
                 " A" + o.r + " " + o.r + " 0 1 0 " + (o.x + o.r).toFixed(1) + " " + o.y.toFixed(1) + " Z ";
         break;
-      case "strokePath":
-        if (dstr) parts.push('<path d="' + dstr + '" fill="none" stroke="' + esc(o.style) +
+      case "strokePath": {
+        var pd = o.path ? pathD(o.path, o.closed) : dstr;
+        if (pd) parts.push('<path d="' + pd + '" fill="none" stroke="' + esc(o.style) +
           '" stroke-width="' + o.lw + '" stroke-linejoin="round" stroke-linecap="round"/>');
         dstr = "";
         break;
-      case "fillPath":
-        if (dstr) parts.push('<path d="' + dstr + '" fill="' + esc(o.style) + '"/>');
+      }
+      case "fillPath": {
+        var pf = o.path ? pathD(o.path, o.closed) : dstr;
+        if (pf) parts.push('<path d="' + pf + '" fill="' + esc(o.style) + '"/>');
         dstr = "";
         break;
+      }
       case "fillCircle":
         parts.push('<circle cx="' + o.x + '" cy="' + o.y + '" r="' + o.r +
           '" fill="' + esc(o.style) + '"/>');
