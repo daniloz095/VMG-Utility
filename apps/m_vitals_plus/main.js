@@ -28,13 +28,14 @@ var KNOCK_BOOST_GATE = 0.5;    // bar; counters only tick above this boost
 var STALE_MS = 6000;           // a DME value older than this is "not available"
 var PEAK_RESET_MS = 6000;      // peak power/torque reset interval (setting later)
 var CHART_WINDOW_S = 30;       // rolling window of the power/torque chart
+var LIVE_WINDOW_S = 20;        // rolling window of the live hpfp/ignition charts
 
 var TABS = [
   { id: "main",  label: "MAIN" },
   { id: "power", label: "POWER" },
-  { id: "lap",   label: "LAP" },
-  { id: "gauge", label: "BOOST GAUGE" },
-  { id: "logs",  label: "LOGS" }
+  { id: "hpfp",  label: "HPFP" },
+  { id: "ign",   label: "IGNITION" },
+  { id: "lap",   label: "LAP" }
 ];
 
 /* Lap tab: acceleration time targets (km/h) and the live side metrics */
@@ -149,6 +150,22 @@ var DETAIL_TABS = [
 var gDetailTab = "power";   // active second-level tab
 var gLapView = "main";      // main | detail — which LAP view is on screen
 var gBackBtnRect = null;    // hit-test rect of the < BACK button
+
+/* Live state for the top-level HPFP and IGNITION tabs (same data sources as
+ * the lap-detail views, but sampled continuously against wall time so the
+ * chart scrolls in real time whether or not a lap run is active). */
+var hpfpLive = {
+  hist: [],                 // [{t, act, req}] rolling LIVE_WINDOW_S samples
+  peakAct: null, peakReq: null,
+  peakActAt: 0, peakReqAt: 0
+};
+var ignLive = {
+  hist: [],                 // [{t, adv, ret}] rolling LIVE_WINDOW_S samples
+  maxAdv: null, maxRet: null,
+  maxAdvAt: 0, maxRetAt: 0,
+  knockEvents: 0,           // knock events seen since app start (boost-gated)
+  misEvents: 0              // misfire events seen since app start (boost-gated)
+};
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                            */
@@ -614,6 +631,212 @@ var LAP_DP = 2;                 // seconds shown with two decimals
 
 function lapMetricVal(key) { return valueFor(key); }
 
+/* ------------------------------------------------------------------ */
+/* live charts for the top-level HPFP / IGNITION tabs                  */
+/*                                                                     */
+/* Same data sources as the LAP detail views, but sampled continuously */
+/* against wall time: the chart scrolls in real time whether or not a   */
+/* lap run is active. Peaks expire like on the POWER tab (same TTL).    */
+/* ------------------------------------------------------------------ */
+
+function pushLive(hist, sample) {
+  hist.push(sample);
+  var cutoff = Date.now() - LIVE_WINDOW_S * 1000;
+  while (hist.length && hist[0].t < cutoff) hist.shift();
+}
+
+/* called from the power sampler tick (every 100 ms) */
+function liveStep() {
+  var now = Date.now();
+  var ttl = gSettings.peakResetMs || PEAK_RESET_MS;
+
+  pushLive(hpfpLive.hist, {
+    t: now,
+    act: fuelPressureActual(),
+    req: fuelPressureRequested()
+  });
+  var fa = hpfpLive.hist[hpfpLive.hist.length - 1].act;
+  var fr = hpfpLive.hist[hpfpLive.hist.length - 1].req;
+  if (num(fa) && (!num(hpfpLive.peakAct) || fa > hpfpLive.peakAct)) { hpfpLive.peakAct = fa; hpfpLive.peakActAt = now; }
+  if (num(fr) && (!num(hpfpLive.peakReq) || fr > hpfpLive.peakReq)) { hpfpLive.peakReq = fr; hpfpLive.peakReqAt = now; }
+  if (num(hpfpLive.peakAct) && now - hpfpLive.peakActAt > ttl) hpfpLive.peakAct = null;
+  if (num(hpfpLive.peakReq) && now - hpfpLive.peakReqAt > ttl) hpfpLive.peakReq = null;
+
+  pushLive(ignLive.hist, {
+    t: now,
+    adv: isFresh("ignAdv") ? v.ignAdv : null,
+    ret: isFresh("knockRetard") ? v.knockRetard : null
+  });
+  var ad = ignLive.hist[ignLive.hist.length - 1].adv;
+  var rd = ignLive.hist[ignLive.hist.length - 1].ret;
+  if (num(ad) && (!num(ignLive.maxAdv) || ad > ignLive.maxAdv)) { ignLive.maxAdv = ad; ignLive.maxAdvAt = now; }
+  if (num(rd) && rd < 0 && (!num(ignLive.maxRet) || Math.abs(rd) > Math.abs(ignLive.maxRet))) { ignLive.maxRet = rd; ignLive.maxRetAt = now; }
+  if (num(ignLive.maxAdv) && now - ignLive.maxAdvAt > ttl) ignLive.maxAdv = null;
+  if (num(ignLive.maxRet) && now - ignLive.maxRetAt > ttl) ignLive.maxRet = null;
+}
+
+/* generic rolling live chart: hist entries {t, <keys>}; series keys can be
+ * negative-valued (retard) — the y range is derived from the window data. */
+function drawLiveChart(ctx, x, y, w, h, title, hist, series, opts) {
+  opts = opts || {};
+  ctx.fillStyle(c("surface"));
+  ctx.fillRoundRect(x + 4, y + 4, w - 8, h - 8, 12);
+
+  var padL = Math.round(w * 0.07);
+  var padR = Math.round(w * 0.03);
+  var padT = Math.round(h * 0.16);
+  var padB = Math.round(h * 0.12);
+  var gx = x + padL, gy = y + padT;
+  var gw = w - padL - padR, gh = h - padT - padB;
+
+  var now = Date.now();
+  var t0 = now - LIVE_WINDOW_S * 1000;
+
+  var lo = null, hi = null;
+  for (var s = 0; s < series.length; s++) {
+    var key = series[s].key;
+    for (var j = 0; j < hist.length; j++) {
+      var val = hist[j][key];
+      if (!num(val) || hist[j].t < t0) continue;
+      if (lo === null || val < lo) lo = val;
+      if (hi === null || val > hi) hi = val;
+    }
+  }
+  if (lo === null) { lo = 0; hi = 1; }
+  if (hi === lo) hi = lo + 1;
+  var span = hi - lo;
+  lo -= span * 0.05; hi += span * 0.05;
+  if (opts.zeroFloor !== false && lo < 0 && Math.abs(lo) < span * 0.2) lo = 0;
+
+  ctx.strokeStyle(c("divider") || c("textTertiary"));
+  ctx.lineWidth = 1;
+  ctx.textBaseline = "middle";
+  ctx.font = Math.round(h * 0.075) + "px sans-serif";
+  for (var g = 0; g <= 4; g++) {
+    var yy = gy + gh - gh * g / 4;
+    ctx.beginPath(); ctx.moveTo(gx, yy); ctx.lineTo(gx + gw, yy); ctx.stroke();
+    ctx.textAlign = "right";
+    ctx.fillStyle(c("textTertiary"));
+    ctx.fillText((lo + (hi - lo) * g / 4).toFixed(series[0].dp), gx - 6, yy);
+  }
+  // time ticks: relative to the right edge ("now")
+  ctx.textAlign = "center";
+  for (var ts = LIVE_WINDOW_S; ts >= 0; ts -= 5) {
+    var tx = gx + gw * (1 - ts / LIVE_WINDOW_S);
+    ctx.fillStyle(c("textTertiary"));
+    ctx.fillText(ts === 0 ? "now" : "-" + ts + "s", tx, gy + gh + padB * 0.55);
+  }
+
+  // title inside the panel
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.font = Math.round(h * 0.08) + "px sans-serif";
+  ctx.fillStyle(c("textSecondary"));
+  ctx.fillText(title, gx, y + Math.round(h * 0.045));
+
+  // legend to the right of the title
+  var lx = gx + ctx.measureText(title).width + Math.round(w * 0.03);
+  ctx.font = Math.round(h * 0.075) + "px sans-serif";
+  for (var ls = 0; ls < series.length; ls++) {
+    var sr = series[ls];
+    ctx.fillStyle(sr.color);
+    ctx.fillRect(lx, y + Math.round(h * 0.05), Math.round(w * 0.025), 4);
+    ctx.textBaseline = "middle";
+    ctx.fillText(sr.label, lx + Math.round(w * 0.032), y + Math.round(h * 0.062));
+    lx += Math.round(w * 0.032) + ctx.measureText(sr.label).width + Math.round(w * 0.03);
+    ctx.textBaseline = "top";
+  }
+
+  // series lines + leading dot
+  for (var ss = 0; ss < series.length; ss++) {
+    var se = series[ss];
+    ctx.strokeStyle(se.color);
+    ctx.lineWidth = se.dashed ? 2 : 3;
+    ctx.beginPath();
+    var started = false, lastPx = 0, lastPy = 0;
+    for (var p = 0; p < hist.length; p++) {
+      var pt = hist[p];
+      var pv = pt[se.key];
+      if (!num(pv) || pt.t < t0) { started = false; continue; }
+      var px = gx + gw * (pt.t - t0) / (now - t0);
+      var py = gy + gh - gh * (pv - lo) / (hi - lo);
+      if (py < gy) py = gy; if (py > gy + gh) py = gy + gh;
+      if (!started) { ctx.moveTo(px, py); started = true; }
+      else ctx.lineTo(px, py);
+      lastPx = px; lastPy = py;
+    }
+    ctx.stroke();
+    if (started && ctx.fillCircle) { ctx.fillStyle(se.color); ctx.fillCircle(lastPx, lastPy, 4); }
+  }
+}
+
+/* stat block with a peak-expiry countdown bar under the value */
+function drawLiveStat(ctx, x, y, w, h, label, valTxt, col, ttlLeftFrac) {
+  drawStat(ctx, x, y, w, h, label, valTxt, col);
+  if (ttlLeftFrac !== null && num(ttlLeftFrac)) {
+    var bw = Math.round(w * 0.8);
+    ctx.fillStyle(c("background"));
+    ctx.fillRect(x, y + h * 0.95, bw, 4);
+    ctx.fillStyle(col);
+    ctx.fillRect(x, y + h * 0.95, Math.round(bw * ttlLeftFrac), 4);
+  }
+}
+
+function peakFrac(at) {
+  if (!at) return null;
+  var ttl = gSettings.peakResetMs || PEAK_RESET_MS;
+  return Math.max(0, (ttl - (Date.now() - at)) / ttl);
+}
+
+/* drawing: HPFP tab (live) */
+function drawHpfpTab(ctx, top) {
+  var area = gH - top;
+  var statsH = Math.round(area * 0.26);
+  var padX = Math.round(gW * 0.03);
+  var cw = Math.floor((gW - 2 * padX) / 3);
+  var curA = fuelPressureActual(), curR = fuelPressureRequested();
+  var sy = top + Math.round(statsH * 0.10);
+  drawLiveStat(ctx, padX, sy, cw, statsH, "RAIL ACTUAL, bar",
+    num(curA) ? String(Math.round(curA)) : "--", COL_FUEL_ACT, null);
+  drawLiveStat(ctx, padX + cw, sy, cw, statsH, "PEAK ACTUAL, bar",
+    num(hpfpLive.peakAct) ? String(Math.round(hpfpLive.peakAct)) : "--",
+    COL_FUEL_ACT, hpfpLive.peakAct ? peakFrac(hpfpLive.peakActAt) : null);
+  drawLiveStat(ctx, padX + cw * 2, sy, cw, statsH, "PEAK REQUESTED, bar",
+    num(hpfpLive.peakReq) ? String(Math.round(hpfpLive.peakReq)) : "--",
+    COL_FUEL_REQ, hpfpLive.peakReq ? peakFrac(hpfpLive.peakReqAt) : null);
+  drawLiveChart(ctx, padX, top + statsH, gW - 2 * padX, area - statsH,
+    "HPFP rail pressure, live", hpfpLive.hist,
+    [{ key: "act", color: COL_FUEL_ACT, label: "actual", dp: 0 },
+     { key: "req", color: COL_FUEL_REQ, label: "requested", dp: 0, dashed: true }]);
+}
+
+/* drawing: IGNITION tab (live) */
+function drawIgnTab(ctx, top) {
+  var area = gH - top;
+  var statsH = Math.round(area * 0.26);
+  var padX = Math.round(gW * 0.03);
+  var cw = Math.floor((gW - 2 * padX) / 4);
+  var sy = top + Math.round(statsH * 0.10);
+  var curAdv = isFresh("ignAdv") ? v.ignAdv : null;
+  var curRet = isFresh("knockRetard") ? v.knockRetard : null;
+  drawLiveStat(ctx, padX, sy, cw, statsH, "ADVANCE NOW, deg",
+    num(curAdv) ? curAdv.toFixed(1) : "--", COL_ADV, null);
+  drawLiveStat(ctx, padX + cw, sy, cw, statsH, "MAX ADVANCE, deg",
+    num(ignLive.maxAdv) ? ignLive.maxAdv.toFixed(1) : "--",
+    COL_ADV, ignLive.maxAdv ? peakFrac(ignLive.maxAdvAt) : null);
+  drawLiveStat(ctx, padX + cw * 2, sy, cw, statsH, "MAX RETARD, deg",
+    num(ignLive.maxRet) ? Math.abs(ignLive.maxRet).toFixed(1) : "--",
+    COL_RET, ignLive.maxRet ? peakFrac(ignLive.maxRetAt) : null);
+  drawLiveStat(ctx, padX + cw * 3, sy, cw, statsH, "KNOCK / MISFIRE",
+    counters.knock + " / " + counters.misfireCount,
+    counters.knock > 0 || counters.misfireCount > 0 ? c("alert") : c("textPrimary"), null);
+  drawLiveChart(ctx, padX, top + statsH, gW - 2 * padX, area - statsH,
+    "Ignition timing, live", ignLive.hist,
+    [{ key: "adv", color: COL_ADV, label: "advance, deg", dp: 1 },
+     { key: "ret", color: COL_RET, label: "retard, deg", dp: 1 }],
+    { zeroFloor: false });
+}
+
 function lapTimeText(target) {
   var t = lap.crossed[target];
   if (num(t)) return t.toFixed(LAP_DP);
@@ -1062,12 +1285,19 @@ function render() {
   var top = drawTabs(ctx);
   if (gActiveTab === "main") drawMain(ctx, top);
   else if (gActiveTab === "power") drawPower(ctx, top);
+  else if (gActiveTab === "hpfp") drawHpfpTab(ctx, top);
+  else if (gActiveTab === "ign") drawIgnTab(ctx, top);
   else if (gActiveTab === "lap") {
     if (gLapView === "detail" && lap.state === "done") drawLapDetails(ctx, top);
     else drawLap(ctx, top);
   }
-  else if (gActiveTab === "gauge") drawPlaceholder(ctx, top, "Boost gauge \u2014 next step");
   else drawPlaceholder(ctx, top, "Session logs \u2014 next step");
+}
+
+/* tabs that redraw at the fast (chart/stopwatch) cadence */
+function isFastTab() {
+  return gActiveTab === "power" || gActiveTab === "hpfp" ||
+         gActiveTab === "ign" || gActiveTab === "lap";
 }
 
 /* ------------------------------------------------------------------ */
@@ -1312,6 +1542,7 @@ function startPowerSampler() {
   stopPowerSampler();
   gPowerTimer = setInterval(function () {
     computePower();
+    liveStep();
     var now = Date.now();
     var ttl = gSettings.peakResetMs || PEAK_RESET_MS;
     if (num(power.peakHp) && now - power.peakHpAt > ttl) power.peakHp = null;
@@ -1506,7 +1737,7 @@ function init(app) {
     startPowerSampler();
     if (gTimer) clearInterval(gTimer);
     // Power tab redraws faster so the chart looks real-time
-    gTimer = setInterval(render, gActiveTab === "power" ? POWER_REFRESH_MS : REFRESH_MS);
+    gTimer = setInterval(render, isFastTab() ? POWER_REFRESH_MS : REFRESH_MS);
     render();
   };
 
@@ -1527,7 +1758,7 @@ function init(app) {
       // Power and Lap tabs run at a faster redraw (chart / stopwatch)
       if (gTimer) {
         clearInterval(gTimer);
-        gTimer = setInterval(render, gActiveTab === "power" ? POWER_REFRESH_MS : REFRESH_MS);
+        gTimer = setInterval(render, isFastTab() ? POWER_REFRESH_MS : REFRESH_MS);
       }
       render();
       return;
@@ -1575,7 +1806,10 @@ function init(app) {
 exports._sim = {
   lap: lap,
   counters: counters,
+  hpfpLive: hpfpLive,
+  ignLive: ignLive,
   render: render,
+  liveStep: liveStep,
   touch: function () { return os.touchhandler; },
   setDetailTab: function (id) { gLapView = "detail"; gDetailTab = id; },
   setMainTab: function (id) { gActiveTab = id; gLapView = "main"; }
