@@ -35,7 +35,22 @@ var TABS = [
   { id: "power", label: "POWER" },
   { id: "hpfp",  label: "HPFP" },
   { id: "ign",   label: "IGNITION" },
+  { id: "fuelcool", label: "FUEL/COOL" },
   { id: "lap",   label: "LAP" }
+];
+
+/* FUEL/COOL tab ("Система топлива и охлаждения"): six tiles in a 3x2 grid.
+ * oilQuality / oilLevel have no trustworthy UDS source on B58 (the DME does
+ * not run an oil-condition sensor; the iDrive level display comes from the
+ * cluster module over K-CAN) — they show "--" until a working DID is probed
+ * on the car or a dedicated source is wired in. */
+var FUELCOOL_TILES = [
+  { key: "fuelTemp",    label: "FUEL TEMP",     unit: "\u00b0C", dp: 0 },
+  { key: "oilQuality",  label: "OIL QUALITY",   unit: "%",     dp: 0, bar: true },
+  { key: "oilLevel",    label: "OIL LEVEL",     unit: "%",     dp: 0, bar: true },
+  { key: "thermoPos",   label: "THERMOSTAT",    unit: "%",     dp: 0, bar: true },
+  { key: "fanRpm",      label: "FAN",           unit: "rpm",   dp: 0 },
+  { key: "radTemp",     label: "RADIATOR",      unit: "\u00b0C", dp: 0 }
 ];
 
 /* Lap tab: acceleration time targets (km/h) and the live side metrics */
@@ -100,6 +115,12 @@ var v = {
   fuelPresAct: null,         // HPFP rail pressure actual, bar
   fuelPresReq: null,         // HPFP rail pressure requested, bar
   ignAdv: null,              // ignition advance, deg CA (ZWSPAEKT)
+  fuelTemp: null,            // fuel temperature, deg C
+  thermoPos: null,           // coolant valve / thermostat position, % open
+  fanRpm: null,              // engine cooling fan speed, rpm
+  radTemp: null,             // radiator outlet coolant temperature, deg C
+  oilQuality: null,          // oil condition %, no trusted source yet -> "--"
+  oilLevel: null,            // oil level %, no trusted source yet -> "--"
   stamp: {}                  // key -> Date.now() of last good read
 };
 
@@ -171,7 +192,7 @@ var ignLive = {
 /* helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-var ALL_TILES = PRIMARY_TILES.concat(SECONDARY_TILES, [
+var ALL_TILES = PRIMARY_TILES.concat(SECONDARY_TILES, FUELCOOL_TILES, [
   { key: "rpm", label: "RPM", unit: "", dp: 0 }
 ]);
 
@@ -280,6 +301,12 @@ function tileColor(key, val) {
     case "voltage":  return val < 12.0 ? c("alert") : c("textPrimary");
     case "knock":    return counters.knock > 0 ? c("alert") : c("textPrimary");
     case "misfire":  return counters.misfireCount > 0 ? c("alert") : c("textPrimary");
+    case "fuelTemp": return val > 60 ? c("warning") : c("textPrimary");
+    case "thermoPos": return val > 90 ? c("warning") : c("textPrimary");
+    case "fanRpm":   return val > 2500 ? c("warning") : (val > 100 ? c("textPrimary") : c("textTertiary"));
+    case "radTemp":  return val > 105 ? c("warning") : c("textPrimary");
+    case "oilQuality": return val < 20 ? c("alert") : val < 40 ? c("warning") : c("success");
+    case "oilLevel":   return val < 30 ? c("alert") : val < 50 ? c("warning") : c("textPrimary");
   }
   return c("textPrimary");
 }
@@ -334,6 +361,30 @@ function drawTile(ctx, x, y, tw, th, tile, val) {
   ctx.fillStyle(col);
   var txt = fmt(tile.key, val);
   ctx.fillText(txt, x + pad, y + th * 0.34);
+
+  // optional 0..100 fill bar along the bottom of the tile (percent metrics)
+  if (tile.bar && num(val)) {
+    var bx = x + pad, bw = tw - 2 * pad;
+    var by = y + th - Math.round(th * 0.16), bh = Math.max(4, Math.round(th * 0.07));
+    ctx.fillStyle(c("divider") || c("textTertiary"));
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle(col);
+    ctx.fillRect(bx, by, Math.round(bw * Math.min(Math.max(val, 0), 100) / 100), bh);
+  }
+}
+
+/* FUEL/COOL tab: six tiles in a 3 x 2 grid under the tab strip. */
+function drawFuelCoolTab(ctx, top) {
+  var area = gH - top;
+  var cols = 3, rows = 2;
+  var cw = Math.floor(gW / cols);
+  var rh = Math.floor(area / rows);
+  for (var i = 0; i < FUELCOOL_TILES.length; i++) {
+    var t = FUELCOOL_TILES[i];
+    var x = (i % cols) * cw;
+    var y = top + Math.floor(i / cols) * rh;
+    drawTile(ctx, x, y, cw, rh, t, valueFor(t.key));
+  }
 }
 
 /* Main screen: 4 rows x 3 columns per the VMG reference. The centre cell of
@@ -1287,6 +1338,7 @@ function render() {
   else if (gActiveTab === "power") drawPower(ctx, top);
   else if (gActiveTab === "hpfp") drawHpfpTab(ctx, top);
   else if (gActiveTab === "ign") drawIgnTab(ctx, top);
+  else if (gActiveTab === "fuelcool") drawFuelCoolTab(ctx, top);
   else if (gActiveTab === "lap") {
     if (gLapView === "detail" && lap.state === "done") drawLapDetails(ctx, top);
     else drawLap(ctx, top);
@@ -1454,7 +1506,12 @@ var gDmeCfg = null;   // config.dme from app.json (set in init)
 /* metric names in poll order (baro first: boost needs it) */
 var POLL_METRICS = ["iat", "egt", "oilPressAbs", "boost", "lambda",
                     "mixtureAdapt", "knockRetard", "baro", "loadDirect",
-                    "gearbox", "voltage", "fuelPresAct", "fuelPresReq", "ignAdv"];
+                    "gearbox", "voltage", "fuelPresAct", "fuelPresReq", "ignAdv",
+                    "fuelTemp", "thermoPos", "fanRpm", "radTemp"];
+
+/* metrics that are NOT polled from the DME (no trustworthy UDS source yet):
+ * they stay null and render as "--" until wired up. */
+var NO_SOURCE_METRICS = ["oilQuality", "oilLevel"];
 
 function metricList(metric) {
   var list = gDmeCfg[metric];
@@ -1662,6 +1719,15 @@ function demoStep() {
   // HPFP rail pressure actual/requested for the lap detail charts
   set("fuelPresReq", 40 + load * 250);
   set("fuelPresAct", 38 + load * 246 + 4 * Math.sin(t * 3.1));
+
+  // FUEL/COOL tab: fuel temp follows intake with a lag; thermostat opens as
+  // coolant climbs; fan ramps above ~100C; radiator outlet sits below coolant
+  set("fuelTemp", 18 + load * 24 + (v.iat - 28) * 0.5);
+  var cly = v.coolant;
+  set("thermoPos", Math.max(0, Math.min(100, (cly - 92) * 8 + 10 * Math.max(0, Math.sin(t * 0.15)))));
+  set("fanRpm", cly > 99 ? Math.round((cly - 99) * 220 + 400 * Math.abs(Math.sin(t * 0.7))) : 0);
+  set("radTemp", cly - 6 - load * 4);
+  // oilQuality / oilLevel: no simulated source either -> stay "--" on purpose
 
   // ignition advance / knock retard for the ignition detail chart
   set("ignAdv", num(v.rpm) && v.rpm > 700 ? 8 + load * 22 - Math.abs(retardDemo()) : 8);

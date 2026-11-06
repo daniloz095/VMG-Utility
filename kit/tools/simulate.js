@@ -429,7 +429,7 @@ function rasterize(svgPath, pngPath, cb) {
 /* ------------------------------------------------------------------ */
 
 runApp(8, function () {
-  var TAB_LABELS = ["main", "power", "hpfp", "ign", "lap"];
+  var TAB_LABELS = ["main", "power", "hpfp", "ign", "fuelcool", "lap"];
   var wanted = tabFilter ? [tabFilter] : TAB_LABELS;
   var gW = SCREEN_W, gH = SCREEN_H;
   var queue = wanted.slice();

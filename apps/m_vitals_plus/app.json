@@ -139,6 +139,30 @@
         { "obd": "0E", "bytes": 1, "at": 0, "factor": 0.5, "offset": -128, "min": -40, "max": 45,
           "note": "OBD PID 0x0E timing advance bank 1, (A/2)-128 deg" }
       ],
+      "fuelTemp": [
+        { "did": "449D", "bytes": 2, "at": 0, "signed": true, "factor": 0.1, "offset": 0, "min": -40, "max": 80,
+          "note": "TEMP_KRAFTSTOFF fuel temperature, tenths of deg C (candidate; verify on car)" },
+        { "did": "5639", "bytes": 1, "at": 0, "factor": 1, "offset": -40, "min": -40, "max": 80,
+          "note": "alternative raw+40 encoding candidate" }
+      ],
+      "thermoPos": [
+        { "did": "5893", "bytes": 2, "at": 0, "factor": 0.0015259022, "offset": 0, "min": 0, "max": 100,
+          "note": "STELLGRAD Kuehlmittelventil/thermostat valve position, raw/65536*100 -> % open (candidate; verify DID/scale on car)" },
+        { "did": "447F", "bytes": 1, "at": 0, "factor": 0.3921568627, "offset": 0, "min": 0, "max": 100,
+          "note": "alternative: duty %, raw/255*100" }
+      ],
+      "fanRpm": [
+        { "did": "5873", "bytes": 2, "at": 0, "factor": 0.25, "offset": 0, "min": 0, "max": 9000,
+          "note": "LUEFTER_DREHZAHL electric coolant fan speed, rpm (candidate; some DMEs report duty 0-100 instead - check the logged raw value)" },
+        { "did": "4457", "bytes": 1, "at": 0, "factor": 39.21568627, "offset": 0, "min": 0, "max": 9000,
+          "note": "fan duty %, raw/255*100 -> scaled to a nominal 0..10000 rpm axis for display" }
+      ],
+      "radTemp": [
+        { "did": "5815", "bytes": 1, "at": 0, "factor": 1, "offset": -48, "min": -40, "max": 130,
+          "note": "TEMP_KUHLKREIS_VORLAUF radiator outlet / circuit supply temp, deg C (candidate)" },
+        { "did": "4431", "bytes": 1, "at": 0, "factor": 1, "offset": -40, "min": -40, "max": 130,
+          "note": "alternative raw+40 encoding candidate" }
+      ],
       "gearbox": [
         { "ecu": 24, "did": "6000", "bytes": 1, "at": 0, "factor": 1, "offset": -40, "min": -40, "max": 160,
           "note": "ZF 8HP _GETRIEBEOELTEMPERATUR, deg C + 40" },

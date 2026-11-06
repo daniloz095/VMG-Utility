@@ -2,12 +2,13 @@
 <rect x="0" y="0" width="1920" height="720" fill="#000"/>
 <rect x="0" y="0" width="1920" height="720" fill="#14161a"/>
 <rect x="0" y="0" width="1920" height="65" fill="#1f2329"/>
-<text x="192" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">MAIN</text>
-<text x="576" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
-<text x="960" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">HPFP</text>
-<text x="1344" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">IGNITION</text>
-<text x="1728" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">LAP</text>
-<rect x="1593.6" y="61" width="268.79999999999995" height="4" fill="#0f9dca"/>
+<text x="160" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">MAIN</text>
+<text x="480" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">POWER</text>
+<text x="800" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">HPFP</text>
+<text x="1120" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">IGNITION</text>
+<text x="1440" y="38.0" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" text-anchor="middle">FUEL/COOL</text>
+<text x="1760" y="38.0" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle">LAP</text>
+<rect x="1648" y="61" width="224" height="4" fill="#0f9dca"/>
 <text x="989" y="330.9" fill="#0f9dca" font-family="DejaVu Sans, Arial, sans-serif" font-size="197" font-weight="bold" text-anchor="middle">0</text>
 <text x="989" y="409.1" fill="#9aa3ad" font-family="DejaVu Sans, Arial, sans-serif" font-size="46" text-anchor="middle">km/h</text>
 <rect x="559" y="576" width="411" height="105" rx="14" fill="#e8452c"/>
