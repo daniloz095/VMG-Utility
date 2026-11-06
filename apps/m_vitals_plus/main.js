@@ -235,36 +235,41 @@ function drawTile(ctx, x, y, tw, th, tile, val) {
   ctx.fillStyle(c("textSecondary"));
   ctx.fillText(tile.label, x + pad, y + pad * 0.7);
 
-  // value + unit
+  // value only — units are intentionally hidden for now (they live in the
+  // tile config and will become a user-facing setting later)
   var col = tileColor(tile.key, val);
   ctx.font = "bold " + Math.round(th * 0.40) + "px sans-serif";
   ctx.fillStyle(col);
   var txt = fmt(tile.key, val);
   ctx.fillText(txt, x + pad, y + th * 0.34);
-  if (tile.unit) {
-    ctx.font = Math.round(th * 0.20) + "px sans-serif";
-    var vw = ctx.measureText(txt).width;
-    ctx.fillText(tile.unit, x + pad + vw + 6, y + th * 0.34 + Math.round(th * 0.14));
-  }
 }
 
 /* Main screen: 4 rows x 3 columns per the VMG reference. The centre cell of
- * row 2 holds the logo, everything else is a data tile. */
+ * row 2 holds the logo, everything else is a data tile.
+ *
+ * The logo column is sized to exactly half the screen width so the badge is
+ * centred on the display; the two data columns share the remaining width. */
+function mainColX() {
+  var side = Math.floor((gW - gW / 2) / 2);   // width of each data column
+  return [0, side, gW - side, gW];            // column edges, logo spans [1..2]
+}
+
 function drawMain(ctx, top) {
   var area = gH - top;
-  var cw = Math.floor(gW / 3);
   var rh = Math.floor(area / 4);
+  var xs = mainColX();
 
   for (var i = 0; i < MAIN_LAYOUT.length; i++) {
     var row = MAIN_LAYOUT[i][0], col = MAIN_LAYOUT[i][1], key = MAIN_LAYOUT[i][2];
-    var x = col * cw, y = top + row * rh;
-    if (key === "logo") { drawLogo(ctx, x, y, cw, rh); continue; }
+    var x = xs[col], w = xs[col + 1] - xs[col];
+    var y = top + row * rh;
+    if (key === "logo") { drawLogo(ctx, x, y, w, rh); continue; }
     var t = tileByKey(key);
     if (!t) continue;
     var val = t.counter
       ? (key === "knock" ? counters.knock : counters.misfireCount)
       : valueFor(key);
-    drawTile(ctx, x, y, cw, rh, t, val);
+    drawTile(ctx, x, y, w, rh, t, val);
   }
 }
 
