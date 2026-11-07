@@ -3026,12 +3026,23 @@ function storeMetric(vkey, val, cand) {
   return true;
 }
 
+/* barometric pressure in bar. v.baro is stored in kPa (~100); the oil
+ * pressure reading is in bar, so the ambient term must be / 100 (not / 10)
+ * to land in the same unit before the subtraction. */
+function baroBar() {
+  return num(v.baro) ? v.baro / 100 : 1.0;
+}
+
 /* side effects on a fresh reading */
 function afterStore(metric, val) {
   if (metric === "knockRetard") handleKnock(val);
-  if (metric === "oilPressAbs") v.oilPress = val - (num(v.baro) ? v.baro / 10 : 1.0);
+  if (metric === "oilPressAbs") {
+    v.oilPress = val - baroBar();              // relative = absolute - ambient
+    markFresh("oilPress");
+  }
   if (metric === "baro" && isFresh("oilPressAbs")) {
-    v.oilPress = v.oilPressAbs - v.baro / 10;   // refresh relative pressure
+    v.oilPress = v.oilPressAbs - baroBar();    // refresh relative pressure
+    markFresh("oilPress");
   }
 }
 
@@ -3175,7 +3186,7 @@ function demoStep() {
   set("boostFes", load * 1.32);                          // bar, relative
   set("iat", 28 + load * 22);
   set("egt", 480 + load * 430);
-  set("oilPressAbs", 1.0 + load * 4.6 + 10.0);           // bar absolute
+  set("oilPressAbs", 2.0 + load * 4.6);                  // bar absolute (~2..6.6)
   set("lambda", 0.99 + 0.07 * load);
   set("mixtureAdapt", 1.0);
   set("coolant", 92 + 4 * Math.sin(t * 0.15));

@@ -186,7 +186,7 @@ function simWave(frac) { return Math.max(0, Math.sin(gSimNow / 1000 * frac)); }
 var SIM_DIDS = {
   0x580F: function () { return hex8(Math.round((28 + 22 * simWave(0.4) + 48) / 0.75)); },       // IAT degC
   0x5896: function () { return hex16(Math.round((480 + 430 * simWave(0.4) + 273.14) * 10)); },   // EGT
-  0x586F: function () { return hex16(Math.round((1.0 + 4.6 * simWave(0.4) + 10.0) * 1000)); },   // oil press abs hPa->bar
+  0x586F: function () { return hex16(Math.round((2.0 + 4.6 * simWave(0.4)) * 1000)); },          // oil press abs hPa->bar (~2..6.6)
   0x4205: function () { return hex16(Math.round((101 + 135 * simWave(0.4)) * 128)); },            // charge pressure kPa->hPa*128
   0x4201: function () { return hex16(Math.round(100.5 * 256)); },                                  // baro kPa -> raw*1/256 hPa
   0x5889: function () { return hex16(Math.round((0.99 + 0.07 * simWave(0.4)) / 0.000244140625)); },// lambda
