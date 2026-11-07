@@ -1,3 +1,4 @@
 dist/
+kit/tools/.node-deps/
 __pycache__/
 *.pyc

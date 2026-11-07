@@ -49,7 +49,7 @@ node kit/tools/extract_sdk.js x_call/javascript/app.js
 ```
 
 ВАЖНО: папку `oap-sdk/` никогда не коммитить и не публиковать — это код BMW.
-Готовые `.mgu`-пакеты тоже содержат его: храните только для своей машины.
+Сам `.mgu` код BMW не содержит (только приложение и шимы) — его публиковать можно.
 
 ---
 
@@ -60,7 +60,7 @@ python3 kit/tools/build.py m_vitals_plus
 # результат: dist/m_vitals_plus@0.1.0.mgu
 ```
 
-Если сборщик требует npm-зависимости — ставьте их под Node 8 (`nvm use 8`).
+Для сборки годятся новые версии Node.js (browserify@17 собирает на Node 20); рантайм на HU остаётся Node 8.
 
 ### Быстрая проверка без машины (эмулятор)
 
@@ -120,9 +120,10 @@ IP и что ключ читается (`ssh -i <ключ> root@<IP>` долже
 
 ### Способ C. Ручная установка по SSH (скрипт deploy.py — Linux/macOS)
 
-Готовый скрипт `kit/tools/deploy.py` делает всё сам: собирает пакет,
-распаковывает его, копирует на HU в `/var/opt/private/oap/<app_id>/`,
-ставит права и перезапускает oap-mainapp.
+Скрипт `kit/tools/deploy.py` берёт готовый `.mgu` из `dist/` (или, если его нет,
+отправляет `main.js`+`app.json` в dev-раскладке), распаковывает, копирует на HU
+в `/var/opt/private/oap/<app_id>/`, ставит права и перезапускает oap-mainapp.
+Сборку он **не** выполняет — сначала соберите `python3 kit/tools/build.py m_vitals_plus`.
 
 ```sh
 python3 kit/tools/deploy.py m_vitals_plus --host <IP> [--key ~/.ssh/id_mgu] [--user root]
@@ -140,7 +141,7 @@ python3 kit/tools/deploy.py m_vitals_plus --host <IP> [--key ~/.ssh/id_mgu] [--u
 
 ```sh
 mkdir /tmp/mvp && tar xzf dist/m_vitals_plus@0.1.0.mgu -C /tmp/mvp
-scp -r /tmp/mvp root@<IP>:/var/opt/private/oap/m_vitals_plus
+scp -O -r /tmp/mvp root@<IP>:/var/opt/private/oap/m_vitals_plus   # -O: legacy-протокол (HU может не иметь SFTP)
 ssh root@<IP> 'chmod -R a+rX /var/opt/private/oap/m_vitals_plus; killall oap-mainapp || true'
 ```
 
@@ -157,7 +158,7 @@ oap-mainapp перезапускается автоматически (~5–10 �
 
 1. **Зажигание ON, двигатель можно не запускать.** Открыть приложение.
 2. Демо-режим: в SETTINGS → `demo` поставить `off` (иначе цифры симулируются).
-3. Пройтись по вкладкам MAIN | POWER | HPFP | IGNITION | FUEL/COOL | ELECTRIC | XDRIVE | LAP | MORE | SETTINGS:
+3. Пройтись по вкладкам MAIN | POWER | HPFP | IGNITION | FUEL/COOL | ELECTRIC | TCASE | LAP | MORE | SETTINGS:
    - MAIN: наддув, температуры, давление масла, λ должны появиться в течение ~10–20 с
      после запуска двигателя (часть DID отвечает только при работающем DME);
    - плитки с `--` = DID не откликнул — это нормально для первых прогонов, см. п.4;
@@ -192,7 +193,7 @@ oap-mainapp перезапускается автоматически (~5–10 �
 | Симптом | Причина / решение |
 |---|---|
 | Приложения нет в меню | Не тот путь установки → `ls /var/opt/private/oap/`; перезапуск `killall oap-mainapp` |
-| Черный экран при открытии | Версия Node на HU ≠ версии SDK: пересоберите извлечённым SDK именно этой машины |
+| Черный экран при открытии | Бандл несовместим с рантаймом HU или ошибка приложения: проверьте лог (`logread`, тег `main`) и пересоберите из текущего `main` |
 | Все плитки `--` | Двигатель заглушен (DME не отвечает на readData) или ECU id не совпадает — пришлите logread |
 | Наддув скачет/не тот | FES-резерв имеет другую калибровку — зафиксируем коэффициент по вашему логу |
 | Температура масла `--` | COM-сигнал приборки отсутствует на вашей комплектации — переключим на DID DME |
