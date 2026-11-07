@@ -2,7 +2,7 @@
   "id": "m_vitals_plus",
   "title": "M Vitals+",
   "description": "Boost, temperatures, oil pressure, lambda, knock and misfire counters for the MGU (iDrive 7)",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "vendor": "custom",
   "loggingId": "OAA1",
   "appSettings": true,
