@@ -66,30 +66,38 @@ node kit/tools/emu.js m_vitals_plus
 Три способа. Первый — PowerShell-скрипт (рекомендуется для Windows), второй —
 через MGU Store, если он стоит на машине, третий — вручную по SSH (работает всегда).
 
-### Способ A (рекомендуемый). install.ps1 — сборка + установка одной командой (Windows)
+### Способ A (рекомендуемый). install.ps1 — скачивание + установка одной командой (Windows)
 
-Скрипт `kit/tools/install.ps1` делает всё автоматически: вызывает `build.py`,
-распаковывает `.mgu`, подключается к HU по SSH с вашим ключом, загружает приложение
-в `/var/opt/private/oap/<app_id>/`, ставит права и перезапускает oap-mainapp.
+Скрипт `kit/tools/install.ps1` по умолчанию скачивает готовый `.mgu` из последнего
+GitHub-релиза, распаковывает его, подключается к HU по SSH с вашим ключом, загружает
+приложение в `/var/opt/private/oap/<app_id>/`, ставит права и перезапускает
+oap-mainapp. Репозиторий и Python/Node на ноутбуке не нужны.
 
 ```powershell
-# из корня репозитория (IP машины по enet, например 172.16.0.1):
+# однострочник (IP машины по enet, например 172.16.0.1):
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName 172.16.0.1
+
+# из клона репозитория — то же самое:
 .\kit\tools\install.ps1 -HostName 172.16.0.1
 
-# без пересборки — поставить готовый пакет из dist/:
-.\kit\tools\install.ps1 -HostName 172.16.0.1 -SkipBuild
+# поставить уже готовый пакет из dist/ (без скачивания):
+.\kit\tools\install.ps1 -HostName 172.16.0.1 -Local
+
+# собрать из исходников на этой машине (нужны Python 3 + Node.js):
+.\kit\tools\install.ps1 -HostName 172.16.0.1 -Build
 ```
 
 Параметры:
 - `-AppId m_vitals_plus` — какое приложение (по умолчанию);
+- `-Repo daniloz095/VMG-Utility` — откуда качать релиз (по умолчанию);
 - `-KeyPath C:\Users\dmpol\.ssh\mgu_root_key` — SSH-ключ (уже задан по умолчанию);
 - `-User root`, `-RemoteBase /var/opt/private/oap` — при необходимости изменить;
+- `-Local` / `-Build` — использовать локальный пакет / собрать из исходников;
 - `-NoRestart` — не перезапускать oap-mainapp.
 
-Требования: OpenSSH Client (компонент Windows 10+), Python 3 и Node.js на PATH
-(для сборки; browserify подтягивается автоматически). Если скрипт сообщит
-«Cannot SSH to …» — проверьте зажигание/питание HU, IP и что ключ читается
-(`ssh -i <ключ> root@<IP>` должен пустить без пароля).
+Требования для однострочника: только OpenSSH Client (компонент Windows 10+) и
+root-ключ. Если скрипт сообщит «Cannot SSH to …» — проверьте зажигание/питание HU,
+IP и что ключ читается (`ssh -i <ключ> root@<IP>` должен пустить без пароля).
 
 ### Способ B. MGU Store
 
