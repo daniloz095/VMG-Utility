@@ -38,13 +38,16 @@ UDS-запросы DID к DME (ecu 18), КПП (ecu 24) и раздатке (ecu
 ## Быстрый старт (Windows, машина подключена по enet)
 
 ```powershell
-# из корня репозитория — собрать и установить одной командой:
-.\kit\tools\install.ps1 -HostName 172.16.0.1
+# однострочник — скачает готовый пакет из GitHub Releases и установит (репозиторий не нужен):
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName 172.16.0.1
 ```
 
-Скрипт соберёт пакет, подключится к HU по SSH вашим ключом, установит приложение
-в `/var/opt/private/oap/m_vitals_plus/` и перезапустит `oap-mainapp`.
-Подробная инструкция — в [docs/INSTALL-ON-CAR.md](docs/INSTALL-ON-CAR.md).
+Скрипт скачает `.mgu` из последнего релиза GitHub, подключится к HU по SSH вашим
+ключом, установит приложение в `/var/opt/private/oap/m_vitals_plus/` и перезапустит
+`oap-mainapp`. Для установки нужны только Windows + OpenSSH-клиент (Python/Node/SDK
+не требуются). Сборка выполняется автоматически в GitHub Actions при релизе — см.
+[«Публикация релизов»](#публикация-релизов). Подробная инструкция — в
+[docs/INSTALL-ON-CAR.md](docs/INSTALL-ON-CAR.md).
 
 ### Требования
 
@@ -132,10 +135,26 @@ python3 kit/tools/deploy.py m_vitals_plus --host 192.168.x.x [--key ~/.ssh/id_mg
 Коротко:
 
 1. Подключиться к HU по enet, зажигание включено.
-2. `.\kit\tools\install.ps1 -HostName 172.16.0.1`
+2. `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName 172.16.0.1`
 3. Открыть приложение в меню OAP, проверить вкладки; при `demo=off` плитки без
    данных означают, что кандидат DID не подтвердился — сырые значения в логе
    помогут подобрать верный DID/масштаб в `app.json`.
+
+---
+
+## Публикация релизов
+
+Готовый `.mgu` собирается автоматически (GitHub Actions, `.github/workflows/build.yml`)
+и прикрепляется к релизу при создании тега `v*`:
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+Workflow соберёт `dist/m_vitals_plus@0.1.0.mgu` (Node + browserify; SDK не нужен —
+модули HU подхватываются на машине) и создаст release с этим артефактом. После этого
+однострочник из «Быстрый старт» ставит именно эту версию. Сборка также запускается
+на каждый push в `main` (без создания релиза, артефакт доступен во вкладке Actions).
 
 Удаление:
 

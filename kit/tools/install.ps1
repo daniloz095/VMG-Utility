@@ -1,14 +1,20 @@
 <#
 .SYNOPSIS
-  One-shot build + deploy of an MGU/OAP app to the head unit over SSH.
+  Install an MGU/OAP app onto the head unit over SSH.
 
 .DESCRIPTION
-  1. Runs kit/tools/build.py to pack apps/<AppId> into dist/<AppId>@<version>.mgu
-     (requires Python 3 and Node.js on PATH; browserify is bootstrapped
-     automatically by build.py).
-  2. Connects to the HU as root over SSH using your private key, verifies the
-     connection, unpacks the .mgu locally, pushes it to /var/opt/private/oap/<AppId>/
-     and restarts oap-mainapp (supervisor respawns it in ~5-10 s).
+  By default this downloads the prebuilt package from the project's GitHub
+  Releases and installs it, so the laptop only needs Windows + the OpenSSH
+  client (no Python/Node/SDK).
+
+    (default)  download the newest <AppId>@<version>.mgu from GitHub Releases
+    -Build     build from source on this machine (needs Python 3 + Node.js
+               and a local clone of this repository)
+    -Local     use a package already present in dist/ (no download / no build)
+
+  After obtaining the package the script connects to the head unit as root,
+  unpacks the .mgu, copies it to /var/opt/private/oap/<AppId>/ and restarts
+  oap-mainapp (supervisor respawns it in ~5-10 s).
 
 .PARAMETER AppId
   Application folder name under apps/. Default: m_vitals_plus
@@ -19,62 +25,95 @@
 .PARAMETER KeyPath
   SSH private key path. Default: C:\Users\dmpol\.ssh\mgu_root_key
 
+.PARAMETER User
+  SSH user. Default: root
+
+.PARAMETER RemoteBase
+  Apps directory on the head unit. Default: /var/opt/private/oap
+
+.PARAMETER Repo
+  GitHub owner/repo to download the release from. Default: daniloz095/VMG-Utility
+
+.PARAMETER Local
+  Use a package already present in dist/ instead of downloading/building.
+
 .PARAMETER SkipBuild
-  Deploy the newest .mgu already present in dist/ without rebuilding.
+  Alias of -Local (kept for backwards compatibility).
+
+.PARAMETER Build
+  Build from source on this machine (requires a local clone + Python 3 + Node.js).
+
+.PARAMETER NoRestart
+  Do not restart oap-mainapp after installing.
 
 .EXAMPLE
+  # one-liner (no repo checkout needed):
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName 172.16.0.1
+
+.EXAMPLE
+  # from a clone of the repo:
   .\kit\tools\install.ps1 -HostName 172.16.0.1
 
 .EXAMPLE
-  .\kit\tools\install.ps1 -HostName 172.16.0.1 -SkipBuild
+  # use a local package without downloading/building:
+  .\kit\tools\install.ps1 -HostName 172.16.0.1 -Local
+
+.EXAMPLE
+  # build from source on this machine:
+  .\kit\tools\install.ps1 -HostName 172.16.0.1 -Build
 
 .NOTES
   Requires OpenSSH client (ssh.exe / scp.exe) - Windows 10+ feature "OpenSSH Client".
 #>
 [CmdletBinding()]
 param(
-    [string]$AppId    = 'm_vitals_plus',
-    [Parameter(Mandatory = $true)]
+    [string]$AppId     = 'm_vitals_plus',
     [string]$HostName,
-    [string]$KeyPath  = 'C:\Users\dmpol\.ssh\mgu_root_key',
-    [string]$User     = 'root',
+    [string]$KeyPath   = 'C:\Users\dmpol\.ssh\mgu_root_key',
+    [string]$User      = 'root',
     [string]$RemoteBase = '/var/opt/private/oap',
+    [string]$Repo      = 'daniloz095/VMG-Utility',
+    [switch]$Local,
     [switch]$SkipBuild,
+    [switch]$Build,
     [switch]$NoRestart
 )
 
 $ErrorActionPreference = 'Stop'
 
-# --- paths ------------------------------------------------------------------
-$RepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent   # kit/tools -> repo root
-$DistDir  = Join-Path $RepoRoot 'dist'
-$BuildPy  = Join-Path $PSScriptRoot 'build.py'
-
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Fail($msg)       { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 
-# --- tool checks --------------------------------------------------------------
-foreach ($bin in 'ssh', 'scp') {
+function Get-LatestReleasePackage {
+    param([string]$Repo, [string]$AppId)
+    $api = "https://api.github.com/repos/$Repo/releases/latest"
+    Write-Step "Looking up the latest release of $Repo ..."
+    $headers = @{ 'User-Agent' = 'mgu-install'; 'Accept' = 'application/vnd.github+json' }
+    try {
+        $rel = Invoke-RestMethod -Uri $api -Headers $headers -TimeoutSec 30
+    } catch {
+        Fail "Cannot reach GitHub ($api). Check the internet connection. ($($_.Exception.Message))"
+    }
+    if (-not $rel -or -not $rel.assets) { Fail "No release found in $Repo." }
+    $asset = $rel.assets | Where-Object { $_.name -like "$AppId@*.mgu" } | Select-Object -First 1
+    if (-not $asset) { Fail "The latest release of $Repo has no $AppId@*.mgu asset." }
+    $out = Join-Path $env:TEMP $asset.name
+    Write-Step "Downloading $($asset.name) ($([math]::Round($asset.size / 1KB, 1)) KB) ..."
+    Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile $out -TimeoutSec 120
+    return $out
+}
+
+if (-not $HostName) { Fail 'HostName is required (the head unit IP, e.g. -HostName 172.16.0.1).' }
+
+# --- tool checks -------------------------------------------------------------
+foreach ($bin in 'ssh', 'scp', 'tar') {
     if (-not (Get-Command $bin -ErrorAction SilentlyContinue)) {
-        Fail "$bin.exe not found. Install the Windows 'OpenSSH Client' feature."
+        Fail "$bin.exe not found. Install the Windows 'OpenSSH Client' feature (ssh/scp); tar ships with Windows 10+."
     }
 }
-if (-not (Test-Path -LiteralPath $KeyPath)) {
-    Fail "SSH key not found: $KeyPath"
-}
+if (-not (Test-Path -LiteralPath $KeyPath)) { Fail "SSH key not found: $KeyPath" }
 
-$PythonExe = $null
-foreach ($cand in 'python', 'python3', 'py') {
-    $cmd = Get-Command $cand -ErrorAction SilentlyContinue
-    if ($cmd) {
-        $PythonExe = $cmd.Source
-        break
-    }
-}
-
-# --- common ssh options -------------------------------------------------------
-# -n : read host key DB non-interactively; BatchMode avoids password prompts
-#      (the HU accepts our key only, a prompt would hang the script).
+# --- common ssh options --------------------------------------------------------
 $SshCommon = @(
     '-o', 'StrictHostKeyChecking=no',
     '-o', 'UserKnownHostsFile=NUL',
@@ -84,59 +123,80 @@ $SshCommon = @(
 )
 $Target = "$User@$HostName"
 
-# --- step 1: build ------------------------------------------------------------
-if (-not $SkipBuild) {
-    if (-not $PythonExe) { Fail 'Python 3 not found on PATH (needed for build.py). Use -SkipBuild to deploy an existing package.' }
-    Write-Step "Building $AppId ..."
+# --- resolve the package --------------------------------------------------------
+$UseLocal = ($Local -or $SkipBuild)
+$PkgPath = $null
+
+if ($Build) {
+    if (-not $PSScriptRoot) { Fail '-Build needs a local clone of the repo (not available in the one-liner).' }
+    $RepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+    $BuildPy  = Join-Path $PSScriptRoot 'build.py'
+    if (-not (Test-Path -LiteralPath $BuildPy)) { Fail "build.py not found next to install.ps1 ($BuildPy)." }
+    $PythonExe = $null
+    foreach ($cand in 'python', 'python3', 'py') {
+        $cmd = Get-Command $cand -ErrorAction SilentlyContinue
+        if ($cmd) { $PythonExe = $cmd.Source; break }
+    }
+    if (-not $PythonExe) { Fail 'Python 3 not found on PATH (needed for build.py).' }
+    Write-Step "Building $AppId from source ..."
     & $PythonExe $BuildPy $AppId
     if ($LASTEXITCODE -ne 0) { Fail "build.py failed (exit $LASTEXITCODE)" }
+    $DistDir = Join-Path $RepoRoot 'dist'
+    $pkg = Get-ChildItem -LiteralPath $DistDir -Filter "$AppId@*.mgu" -ErrorAction SilentlyContinue |
+           Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $pkg) { Fail "build.py produced no $AppId@*.mgu in $DistDir." }
+    $PkgPath = $pkg.FullName
+}
+elseif ($UseLocal) {
+    if (-not $PSScriptRoot) { Fail '-Local needs a local clone of the repo (not available in the one-liner).' }
+    $RepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+    $DistDir  = Join-Path $RepoRoot 'dist'
+    $pkg = Get-ChildItem -LiteralPath $DistDir -Filter "$AppId@*.mgu" -ErrorAction SilentlyContinue |
+           Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $pkg) { Fail "No $AppId@*.mgu in $DistDir. Run with -Build or drop -Local to download." }
+    $PkgPath = $pkg.FullName
+}
+else {
+    $PkgPath = Get-LatestReleasePackage -Repo $Repo -AppId $AppId
 }
 
-# locate newest matching package
-if (-not (Test-Path -LiteralPath $DistDir)) { Fail "dist/ not found. Build first (drop -SkipBuild)." }
-$pkg = Get-ChildItem -LiteralPath $DistDir -Filter "$AppId@*.mgu" |
-       Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (-not $pkg) { Fail "No $AppId@*.mgu in $DistDir. Run without -SkipBuild." }
-Write-Step "Package: $($pkg.Name) ($([math]::Round($pkg.Length/1KB,1)) KB)"
+Write-Step "Package: $(Split-Path $PkgPath -Leaf) ($([math]::Round((Get-Item -LiteralPath $PkgPath).Length / 1KB, 1)) KB)"
 
-# --- step 2: extract locally (tar.gz with app.json + javascript/app.js) --------
+# --- extract + deploy ------------------------------------------------------------
 $Stage = Join-Path ([System.IO.Path]::GetTempPath()) ("mgu-deploy-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $Stage | Out-Null
 try {
-    $Payload = Join-Path $Stage $AppId
+    $Payload = Join-Path $Stage 'pkg'
     New-Item -ItemType Directory -Path $Payload | Out-Null
     Write-Step 'Unpacking .mgu ...'
-    tar.exe -xzf $pkg.FullName -C $Payload
-    if ($LASTEXITCODE -ne 0) { Fail "tar extraction failed (exit $LASTEXITCODE)" }
+    tar.exe -xzf $PkgPath -C $Payload
+    if ($LASTEXITCODE -ne 0) { Fail 'tar extraction failed.' }
     if (-not (Test-Path (Join-Path $Payload 'app.json'))) { Fail 'package missing app.json' }
     if (-not (Test-Path (Join-Path $Payload 'javascript/app.js'))) { Fail 'package missing javascript/app.js' }
 
-    # --- step 3: connectivity check -------------------------------------------
     Write-Step "Connecting to $Target ..."
     ssh @SshCommon -n $Target 'echo ok' 2>$null
     if ($LASTEXITCODE -ne 0) {
         Fail "Cannot SSH to $Target. Check ignition/power, IP ($HostName) and key ($KeyPath)."
     }
 
-    # --- step 4: push ----------------------------------------------------------
     Write-Step "Installing to $RemoteBase/$AppId ..."
-    ssh @SshCommon $Target "rm -rf $RemoteBase/$AppId && mkdir -p $RemoteBase/$AppId"
-    if ($LASTEXITCODE -ne 0) { Fail 'remote mkdir failed' }
+    ssh @SshCommon $Target "rm -rf $RemoteBase/$AppId"
+    if ($LASTEXITCODE -ne 0) { Fail 'remote rm failed' }
 
-    scp @SshCommon -r $Payload "${Target}:$RemoteBase/"
+    scp @SshCommon -r $Payload "${Target}:$RemoteBase/$AppId"
     if ($LASTEXITCODE -ne 0) { Fail 'scp upload failed' }
 
     ssh @SshCommon $Target "chmod -R a+rX $RemoteBase/$AppId"
     if ($LASTEXITCODE -ne 0) { Fail 'remote chmod failed' }
 
-    # --- step 5: restart mainapp ------------------------------------------------
     if (-not $NoRestart) {
         Write-Step 'Restarting oap-mainapp ...'
         ssh @SshCommon $Target 'killall oap-mainapp || true'
     }
 
     Write-Host ''
-    Write-Step "DONE: $AppId ($($pkg.Name)) deployed to ${Target}:$RemoteBase/$AppId"
+    Write-Step "DONE: $AppId ($(Split-Path $PkgPath -Leaf)) deployed to ${Target}:$RemoteBase/$AppId"
     Write-Host 'The app respawns in ~5-10 s. Open it from the OAP menu.' -ForegroundColor Green
 }
 finally {
