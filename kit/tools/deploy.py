@@ -21,6 +21,7 @@ Requires working SSH access (you have root on the HU). The script uses plain
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -41,6 +42,20 @@ def sh(cmd, check=True):
     if check and r.returncode != 0:
         die("command failed (exit %d)" % r.returncode)
     return r.returncode
+
+
+def scp_legacy_opt():
+    """OpenSSH >= 9.0 defaults scp to the SFTP protocol; the HU's embedded sshd
+    may lack sftp. Return ['-O'] to force the legacy scp protocol when the
+    client supports it (-O arrived in OpenSSH 8.7)."""
+    try:
+        p = subprocess.run(["ssh", "-V"], capture_output=True, text=True)
+        m = re.search(r"OpenSSH[^\d]*(\d+)\.(\d+)", (p.stderr or "") + (p.stdout or ""))
+        if m and int(m.group(1)) >= 9:
+            return ["-O"]
+    except Exception:
+        pass
+    return []
 
 
 def main():
@@ -86,8 +101,7 @@ def main():
             src = os.path.join(app_dir, f)
             if not os.path.isfile(src):
                 die("missing %s" % src)
-            # HU expects javascript/app.js; keep main.js too for dev reloads
-            pass
+        # HU expects the bundle at javascript/app.js; main.js is copied there.
         os.makedirs(os.path.join(payload, "javascript"))
         import shutil
         shutil.copy(os.path.join(app_dir, "app.json"), payload)
@@ -95,9 +109,10 @@ def main():
                     os.path.join(payload, "javascript", "app.js"))
 
     remote = "%s:%s/%s" % (target, a.dest, a.app_id)
-    sh(["ssh"] + ssh_opts + [target, "rm -rf %s/%s && mkdir -p %s/%s"
-                             % (a.dest, a.app_id, a.dest, a.app_id)])
-    sh(["scp"] + ssh_opts + ["-r", payload, "%s:%s/" % (target, a.dest)])
+    sh(["ssh"] + ssh_opts + [target, "mkdir -p %s && rm -rf %s/%s"
+                             % (a.dest, a.dest, a.app_id)])
+    sh(["scp"] + ssh_opts + scp_legacy_opt() + ["-r", payload,
+        "%s:%s/%s" % (target, a.dest, a.app_id)])
     sh(["ssh"] + ssh_opts + [target,
         "chmod -R a+rX %s/%s" % (a.dest, a.app_id)])
     if not a.no_restart:

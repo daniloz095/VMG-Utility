@@ -21,7 +21,7 @@ GitHub Releases и ставится на головное устройство (
 
 ```powershell
 Get-Command ssh, scp, tar            # должны найтись все три
-Test-Path C:\Users\dmpol\.ssh\mgu_root_key   # True, если ключ на месте
+Test-Path "$env:USERPROFILE\.ssh\mgu_root_key"   # True, если ключ на месте
 ```
 
 Если `ssh` не найден: **Параметры → Приложения → Дополнительные компоненты →
@@ -38,7 +38,7 @@ Test-Path C:\Users\dmpol\.ssh\mgu_root_key   # True, если ключ на ме
 Проверка связи:
 
 ```powershell
-ssh -i C:\Users\dmpol\.ssh\mgu_root_key root@172.16.0.1 "echo ok"
+ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@172.16.0.1 "echo ok"
 ```
 
 ---
@@ -65,7 +65,7 @@ ssh -i C:\Users\dmpol\.ssh\mgu_root_key root@172.16.0.1 "echo ok"
 | Параметр | По умолчанию | Описание |
 |---|---|---|
 | `-HostName` | — (обязателен) | IP/адрес HU |
-| `-KeyPath` | `C:\Users\dmpol\.ssh\mgu_root_key` | приватный ключ root |
+| `-KeyPath` | `<профиль>\.ssh\mgu_root_key` | приватный ключ root |
 | `-User` | `root` | пользователь SSH |
 | `-RemoteBase` | `/var/opt/private/oap` | каталог приложений на HU |
 | `-Repo` | `daniloz095/VMG-Utility` | откуда качать релиз |
@@ -94,7 +94,7 @@ cd VMG-Utility
 ## Удаление
 
 ```powershell
-ssh -i C:\Users\dmpol\.ssh\mgu_root_key root@172.16.0.1 "rm -rf /var/opt/private/oap/m_vitals_plus; killall oap-mainapp"
+ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@172.16.0.1 "rm -rf /var/opt/private/oap/m_vitals_plus; killall oap-mainapp"
 ```
 
 ---

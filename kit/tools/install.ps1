@@ -23,7 +23,7 @@
   IP or hostname of the head unit (e.g. 172.16.0.1 when connected via enet).
 
 .PARAMETER KeyPath
-  SSH private key path. Default: C:\Users\dmpol\.ssh\mgu_root_key
+  SSH private key path. Default: <user profile>\.ssh\mgu_root_key
 
 .PARAMETER User
   SSH user. Default: root
@@ -69,7 +69,7 @@
 param(
     [string]$AppId     = 'm_vitals_plus',
     [string]$HostName,
-    [string]$KeyPath   = 'C:\Users\dmpol\.ssh\mgu_root_key',
+    [string]$KeyPath   = (Join-Path $env:USERPROFILE '.ssh\mgu_root_key'),
     [string]$User      = 'root',
     [string]$RemoteBase = '/var/opt/private/oap',
     [string]$Repo      = 'daniloz095/VMG-Utility',
@@ -79,7 +79,10 @@ param(
     [switch]$NoRestart
 )
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
+
+# GitHub requires TLS 1.2+; older PowerShell defaults may negotiate TLS 1.0/1.1.
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Fail($msg)       { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
@@ -90,7 +93,7 @@ function Get-LatestReleasePackage {
     Write-Step "Looking up the latest release of $Repo ..."
     $headers = @{ 'User-Agent' = 'mgu-install'; 'Accept' = 'application/vnd.github+json' }
     try {
-        $rel = Invoke-RestMethod -Uri $api -Headers $headers -TimeoutSec 30
+        $rel = Invoke-RestMethod -Uri $api -Headers $headers -TimeoutSec 30 -ErrorAction Stop
     } catch {
         Fail "Cannot reach GitHub ($api). Check the internet connection. ($($_.Exception.Message))"
     }
@@ -99,7 +102,11 @@ function Get-LatestReleasePackage {
     if (-not $asset) { Fail "The latest release of $Repo has no $AppId@*.mgu asset." }
     $out = Join-Path $env:TEMP $asset.name
     Write-Step "Downloading $($asset.name) ($([math]::Round($asset.size / 1KB, 1)) KB) ..."
-    Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile $out -TimeoutSec 120
+    try {
+        Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile $out -TimeoutSec 120 -ErrorAction Stop
+    } catch {
+        Fail "Download failed ($($asset.name)). Check the internet connection. ($($_.Exception.Message))"
+    }
     return $out
 }
 
@@ -122,6 +129,16 @@ $SshCommon = @(
     '-i', $KeyPath
 )
 $Target = "$User@$HostName"
+
+# scp on OpenSSH >= 9.0 defaults to the SFTP protocol, which the HU's embedded
+# sshd may not provide. Force the legacy scp protocol when the client supports
+# -O (added in OpenSSH 8.7; the SFTP default arrived in 9.0). Note: Windows
+# scp has no -V, so read the version from ssh (they ship together).
+$ScpLegacy = @()
+$sshVer = (& ssh -V 2>&1 | Out-String)
+if ($sshVer -match 'OpenSSH[^\d]*(\d+)\.(\d+)') {
+    if ([int]$Matches[1] -ge 9) { $ScpLegacy = @('-O') }
+}
 
 # --- resolve the package --------------------------------------------------------
 $UseLocal = ($Local -or $SkipBuild)
@@ -181,10 +198,10 @@ try {
     }
 
     Write-Step "Installing to $RemoteBase/$AppId ..."
-    ssh @SshCommon $Target "rm -rf $RemoteBase/$AppId"
-    if ($LASTEXITCODE -ne 0) { Fail 'remote rm failed' }
+    ssh @SshCommon $Target "mkdir -p $RemoteBase && rm -rf $RemoteBase/$AppId"
+    if ($LASTEXITCODE -ne 0) { Fail 'remote mkdir/rm failed' }
 
-    scp @SshCommon -r $Payload "${Target}:$RemoteBase/$AppId"
+    scp @SshCommon @ScpLegacy -q -r $Payload "${Target}:$RemoteBase/$AppId"
     if ($LASTEXITCODE -ne 0) { Fail 'scp upload failed' }
 
     ssh @SshCommon $Target "chmod -R a+rX $RemoteBase/$AppId"
@@ -192,7 +209,7 @@ try {
 
     if (-not $NoRestart) {
         Write-Step 'Restarting oap-mainapp ...'
-        ssh @SshCommon $Target 'killall oap-mainapp || true'
+        ssh @SshCommon $Target 'killall oap-mainapp || true' 2>$null
     }
 
     Write-Host ''

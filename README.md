@@ -52,13 +52,20 @@ UDS-запросы DID к DME (ecu 18), КПП (ecu 24) и раздатке (ecu
 
 ### Требования
 
+Для установки **одной командой** (рекомендуется) — только два пункта:
+
+| Компонент | Зачем | Примечание |
+|---|---|---|
+| OpenSSH клиент | SSH/SCP до HU | встроен в Windows 10+ («Optional feature») |
+| SSH-ключ root на HU | доступ к головной части | по умолчанию `<профиль>\.ssh\mgu_root_key` |
+
+Только для локальной сборки (`-Build`) и разработки:
+
 | Компонент | Зачем | Примечание |
 |---|---|---|
 | Python 3 | сборка (`build.py`), деплой (`deploy.py`) | на PATH |
-| Node.js | browserify-бандл, эмулятор | точное совпадение рантайма — Node 8; новые версии работают для сборки |
-| OpenSSH клиент | SSH/SCP до HU | встроен в Windows 10+ («Optional feature») |
-| SSH-ключ root на HU | доступ к головной части | по умолчанию `C:\Users\dmpol\.ssh\mgu_root_key` |
-| `oap-sdk` | код BMW, нужен для сборки `.mgu` | однократно извлекается с машины — см. [docs/OAP-SDK.md](docs/OAP-SDK.md) |
+| Node.js | browserify-бандл, эмулятор | новые версии работают для сборки |
+| `oap-sdk` | код BMW; только для эмулятора/разработки | извлекается с машины — см. [docs/OAP-SDK.md](docs/OAP-SDK.md) |
 
 ---
 
@@ -71,7 +78,7 @@ apps/m_vitals_plus/          исходники приложения
   sim/*.png                  регенерируемые превью всех вкладок
 kit/tools/                   тулчейн
   build.py                   apps/<id> -> dist/<id>@<ver>.mgu (tar.gz с бандлом)
-  install.ps1                Windows: сборка + SSH-установка одной командой
+  install.ps1                Windows: скачивание + SSH-установка одной командой (`-Build` — сборка)
   deploy.py                  Linux/macOS: SSH-деплой готового пакета
   emu.js                     live-превью в браузере (http://localhost:8077)
   simulate.js               генерация PNG-превью вкладок
@@ -160,7 +167,7 @@ Workflow соберёт `dist/m_vitals_plus@0.1.0.mgu` (Node + browserify; SDK �
 Удаление:
 
 ```powershell
-ssh -i C:\Users\dmpol\.ssh\mgu_root_key root@172.16.0.1 "rm -rf /var/opt/private/oap/m_vitals_plus; killall oap-mainapp"
+ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@172.16.0.1 "rm -rf /var/opt/private/oap/m_vitals_plus; killall oap-mainapp"
 ```
 
 ---
