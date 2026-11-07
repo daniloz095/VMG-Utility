@@ -26,9 +26,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install browserify
-        run: npm install -g browserify@17
-
       - name: Build package
         run: python3 kit/tools/build.py m_vitals_plus
 

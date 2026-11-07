@@ -47,30 +47,28 @@ def read_manifest(app_dir):
         return json.load(f)
 
 
-def ensure_browserify(node_bin):
-    """Return path to a browserify bin, bootstrapping locally if needed."""
-    # already on PATH?
-    which = shutil.which("browserify")
-    if which:
-        return which
-    local = os.path.join(DEPS, "node_modules", ".bin", "browserify")
-    if os.path.exists(local):
-        return local
+def ensure_browserify():
+    """Return the path to browserify's JS CLI entry, bootstrapping locally if
+    needed. The entry is always run through `node` (never the `.bin` shell shim)
+    so the build works identically on Windows and Linux."""
+    cli = os.path.join(DEPS, "node_modules", "browserify", "bin", "cmd.js")
+    if os.path.exists(cli):
+        return cli
     print("browserify not found - bootstrapping into %s ..." % DEPS)
     os.makedirs(DEPS, exist_ok=True)
     pkg = os.path.join(DEPS, "package.json")
     if not os.path.exists(pkg):
         with open(pkg, "w") as f:
             f.write('{"name":"mgu-build-deps","private":true}\n')
-    cmd = [node_bin or "npm", "--yes", "install", "--prefix", DEPS,
+    cmd = ["npm", "--yes", "install", "--prefix", DEPS,
            "browserify@17", "--no-audit", "--no-fund"]
     try:
         subprocess.run(cmd, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         die("could not install browserify (%s). Install it manually: npm i -g browserify" % e)
-    if not os.path.exists(local):
+    if not os.path.exists(cli):
         die("browserify bootstrap failed")
-    return local
+    return cli
 
 
 def find_node():
@@ -117,7 +115,7 @@ PRELUDE = (
 )
 
 
-def bundle(app_dir, browserify_bin, node_bin):
+def bundle(app_dir, browserify_cli, node_bin):
     main_js = os.path.join(app_dir, "main.js")
     if not os.path.isfile(main_js):
         die("missing %s" % main_js)
@@ -128,14 +126,18 @@ def bundle(app_dir, browserify_bin, node_bin):
         f.write("module.exports = require(%r);\n" % main_js)
     out = os.path.join(outdir, "app.js")
     env = dict(os.environ)
+    node = node_bin or find_node() or "node"
     if node_bin:
-        env["PATH"] = os.path.dirname(node_bin) + os.pathsep + env.get("PATH", "")
+        d = os.path.dirname(node_bin)
+        if d:
+            env["PATH"] = d + os.pathsep + env.get("PATH", "")
     shim = make_shim_dir()
     prev = env.get("NODE_PATH")
     env["NODE_PATH"] = shim + ((os.pathsep + prev) if prev else "")
     # Plain browserify (ES5 code, no transpile step required). MGU runtime is
-    # Node 8 style CommonJS; browserify produces exactly that.
-    cmd = [browserify_bin, "-o", out, entry]
+    # Node 8 style CommonJS; browserify produces exactly that. Run the CLI entry
+    # through node so it works on Windows (no `.bin` shim) and Linux alike.
+    cmd = [node, browserify_cli, "-o", out, entry]
     print("bundling:", " ".join(cmd))
     r = subprocess.run(cmd, env=env)
     shutil.rmtree(shim, ignore_errors=True)
@@ -154,7 +156,7 @@ def build(app_id, sdk_dir=None, node_bin=None, out_dir=None):
     os.makedirs(out_dir, exist_ok=True)
 
     node_bin = node_bin or find_node()
-    bfy = ensure_browserify(node_bin)
+    bfy = ensure_browserify()
 
     # bundle
     stage = tempfile.mkdtemp(prefix="mgu-stage-")
