@@ -46,7 +46,8 @@ UDS-запросы DID к DME (ecu 18), КПП (ecu 24) и раздатке (ecu
 ключом, установит приложение в `/var/opt/private/oap/m_vitals_plus/` и перезапустит
 `oap-mainapp`. Для установки нужны только Windows + OpenSSH-клиент (Python/Node/SDK
 не требуются). Сборка выполняется автоматически в GitHub Actions при релизе — см.
-[«Публикация релизов»](#публикация-релизов). Подробная инструкция — в
+[«Публикация релизов»](#публикация-релизов). Пошаговая PowerShell-инструкция —
+[docs/INSTALL-POWERSHELL.md](docs/INSTALL-POWERSHELL.md); полное руководство —
 [docs/INSTALL-ON-CAR.md](docs/INSTALL-ON-CAR.md).
 
 ### Требования
