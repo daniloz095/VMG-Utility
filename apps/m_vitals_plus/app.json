@@ -504,11 +504,11 @@
           "did": "F47D",
           "bytes": 2,
           "at": 0,
-          "factor": 0.00025,
+          "factor": 0.1,
           "offset": 0,
           "min": 20,
           "max": 400,
-          "note": "OBD PID 0x7D common rail pressure A absolute, kPa units raw*655.36 stored big-endian -> bar"
+          "note": "OBD PID 0x7D common rail pressure A absolute, (A*256+B)*10 kPa -> bar"
         }
       ],
       "fuelPresReq": [

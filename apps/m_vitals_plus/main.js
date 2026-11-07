@@ -1417,7 +1417,7 @@ function gearEstimate() {
   var rpm = num(v.rpm) ? v.rpm : null;
   var spd = lapSpeedKmh();
   if (!num(rpm) || rpm < 600 || !num(spd) || spd < 1) return null;
-  var ratio = rpm / (spd * 1000 / 60 / (Math.PI * GEAR_WHEEL_KM)) * GEAR_FINAL;
+  var ratio = rpm / (spd * 1000 / 60 / GEAR_WHEEL_KM) / GEAR_FINAL;
   var best = null, bd = 1e9;
   for (var i = 0; i < GEAR_RATIOS.length; i++) {
     var d = Math.abs(GEAR_RATIOS[i] - ratio);
@@ -2887,7 +2887,7 @@ function computePower() {
   var kw = tq * v.rpm * 2 * Math.PI / 60 / 1000;
   power.nm = tq;
   power.kw = kw;
-  power.hp = kw * 1.01387;                      // metric horsepower (PS)
+  power.hp = kw * 1.35962;                      // metric horsepower (PS)
   power.stamp = Date.now();
   pushHistory();
   updatePeaks();
