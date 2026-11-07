@@ -60,7 +60,8 @@ def ensure_browserify():
     if not os.path.exists(pkg):
         with open(pkg, "w") as f:
             f.write('{"name":"mgu-build-deps","private":true}\n')
-    cmd = ["npm", "--yes", "install", "--prefix", DEPS,
+    cmd = (["cmd", "/c", "npm"] if os.name == "nt" else ["npm"]) + \
+          ["--yes", "install", "--prefix", DEPS,
            "browserify@17", "--no-audit", "--no-fund"]
     try:
         subprocess.run(cmd, check=True)
