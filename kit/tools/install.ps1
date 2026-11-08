@@ -85,7 +85,13 @@ $ErrorActionPreference = 'Continue'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
-function Fail($msg)       { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
+function Fail($msg) {
+    Write-Host "ERROR: $msg" -ForegroundColor Red
+    Write-Host ''
+    Write-Host 'Press Enter to close this window...' -ForegroundColor Yellow
+    Read-Host | Out-Null
+    exit 1
+}
 
 function Get-LatestReleasePackage {
     param([string]$Repo, [string]$AppId)
@@ -95,7 +101,7 @@ function Get-LatestReleasePackage {
     try {
         $rel = Invoke-RestMethod -Uri $api -Headers $headers -TimeoutSec 30 -ErrorAction Stop
     } catch {
-        Fail "Cannot reach GitHub ($api). Check the internet connection. ($($_.Exception.Message))"
+        Fail "Cannot reach GitHub ($api). Is the laptop online? If you use a proxy/VPN it must be active.`n  $($_.Exception.Message)"
     }
     if (-not $rel -or -not $rel.assets) { Fail "No release found in $Repo." }
     $asset = $rel.assets | Where-Object { $_.name -like "$AppId@*.mgu" } | Select-Object -First 1
@@ -192,9 +198,9 @@ try {
     if (-not (Test-Path (Join-Path $Payload 'javascript/app.js'))) { Fail 'package missing javascript/app.js' }
 
     Write-Step "Connecting to $Target ..."
-    ssh @SshCommon -n $Target 'echo ok' 2>$null
+    $sshErr = (& ssh @SshCommon -n $Target 'echo ok' 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) {
-        Fail "Cannot SSH to $Target. Check ignition/power, IP ($HostName) and key ($KeyPath)."
+        Fail "Cannot SSH to $Target. Check: ignition ON, ENET cable, laptop Ethernet in the HU subnet, key readable.`n  ssh said: $sshErr"
     }
 
     Write-Step "Installing to $RemoteBase/$AppId ..."
