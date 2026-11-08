@@ -87,17 +87,17 @@ GitHub-релиза, распаковывает его, подключается
 oap-mainapp. Репозиторий и Python/Node на ноутбуке не нужны.
 
 ```powershell
-# однострочник (IP машины по enet, например 172.16.0.1):
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName 172.16.0.1
+# однострочник (<HU-IP> = Gateway из idrive7-8-ssh-root, обычно 169.254.x.x):
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName <HU-IP>
 
 # из клона репозитория — то же самое:
-.\kit\tools\install.ps1 -HostName 172.16.0.1
+.\kit\tools\install.ps1 -HostName <HU-IP>
 
 # поставить уже готовый пакет из dist/ (без скачивания):
-.\kit\tools\install.ps1 -HostName 172.16.0.1 -Local
+.\kit\tools\install.ps1 -HostName <HU-IP> -Local
 
 # собрать из исходников на этой машине (нужны Python 3 + Node.js):
-.\kit\tools\install.ps1 -HostName 172.16.0.1 -Build
+.\kit\tools\install.ps1 -HostName <HU-IP> -Build
 ```
 
 Параметры:

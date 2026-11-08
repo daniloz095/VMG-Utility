@@ -39,8 +39,11 @@ UDS-запросы DID к DME (ecu 18), КПП (ecu 24) и раздатке (ecu
 
 ```powershell
 # однострочник — скачает готовый пакет из GitHub Releases и установит (репозиторий не нужен):
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName 172.16.0.1
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName <HU-IP>
 ```
+
+`<HU-IP>` — IP головного устройства: это **Gateway** из вывода `idrive7-8-ssh-root`
+(обычно `169.254.x.x` link-local через ENET).
 
 Скрипт скачает `.mgu` из последнего релиза GitHub, подключится к HU по SSH вашим
 ключом, установит приложение в `/var/opt/private/oap/m_vitals_plus/` и перезапустит
@@ -143,7 +146,7 @@ python3 kit/tools/deploy.py m_vitals_plus --host 192.168.x.x [--key ~/.ssh/id_mg
 Коротко:
 
 1. Подключиться к HU по enet, зажигание включено.
-2. `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName 172.16.0.1`
+2. `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName <HU-IP>`
 3. Открыть приложение в меню OAP, проверить вкладки; при `demo=off` плитки без
    данных означают, что кандидат DID не подтвердился — сырые значения в логе
    помогут подобрать верный DID/масштаб в `app.json`.
@@ -167,7 +170,7 @@ Workflow соберёт `dist/m_vitals_plus@0.1.0.mgu` (Node + browserify; SDK �
 Удаление:
 
 ```powershell
-ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@172.16.0.1 "rm -rf /var/opt/private/oap/m_vitals_plus; killall oap-mainapp"
+ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@<HU-IP> "rm -rf /var/opt/private/oap/m_vitals_plus; killall oap-mainapp"
 ```
 
 ---

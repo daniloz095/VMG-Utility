@@ -20,7 +20,8 @@
   Application folder name under apps/. Default: m_vitals_plus
 
 .PARAMETER HostName
-  IP or hostname of the head unit (e.g. 172.16.0.1 when connected via enet).
+  IP of the head unit — the "Gateway" shown by idrive7-8-ssh-root (usually a
+  169.254.x.x link-local address over the ENET cable).
 
 .PARAMETER KeyPath
   SSH private key path. Default: <user profile>\.ssh\mgu_root_key
@@ -48,19 +49,19 @@
 
 .EXAMPLE
   # one-liner (no repo checkout needed):
-  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName 172.16.0.1
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName <HU-IP>
 
 .EXAMPLE
   # from a clone of the repo:
-  .\kit\tools\install.ps1 -HostName 172.16.0.1
+  .\kit\tools\install.ps1 -HostName <HU-IP>
 
 .EXAMPLE
   # use a local package without downloading/building:
-  .\kit\tools\install.ps1 -HostName 172.16.0.1 -Local
+  .\kit\tools\install.ps1 -HostName <HU-IP> -Local
 
 .EXAMPLE
   # build from source on this machine:
-  .\kit\tools\install.ps1 -HostName 172.16.0.1 -Build
+  .\kit\tools\install.ps1 -HostName <HU-IP> -Build
 
 .NOTES
   Requires OpenSSH client (ssh.exe / scp.exe) - Windows 10+ feature "OpenSSH Client".
@@ -116,7 +117,7 @@ function Get-LatestReleasePackage {
     return $out
 }
 
-if (-not $HostName) { Fail 'HostName is required (the head unit IP, e.g. -HostName 172.16.0.1).' }
+if (-not $HostName) { Fail 'HostName is required (the head unit IP — the Gateway shown by idrive7-8-ssh-root, usually 169.254.x.x).' }
 
 # --- tool checks -------------------------------------------------------------
 foreach ($bin in 'ssh', 'scp', 'tar') {

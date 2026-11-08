@@ -31,14 +31,15 @@ Test-Path "$env:USERPROFILE\.ssh\mgu_root_key"   # True, если ключ на 
 
 ## Шаг 2. Подключить ноутбук и включить зажигание
 
-- **ENET**: кабель в OBD-порт машины, Ethernet — в ноутбук. HU обычно на `172.16.0.1`.
-- **Wi-Fi**: подключиться к хотспоту машины (по умолчанию `172.16.222.97`).
+- **ENET**: кабель в OBD-порт машины, Ethernet — в ноутбук. IP машины (`<HU-IP>`) — это
+  **Gateway** из вывода `idrive7-8-ssh-root` (обычно `169.254.x.x` link-local).
+- **Wi-Fi**: подключиться к хотспоту машины (вместо `<HU-IP>` подставьте его адрес).
 - Включить зажигание (или «разбудить» машину), чтобы HU отвечал по SSH.
 
 Проверка связи:
 
 ```powershell
-ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@172.16.0.1 "echo ok"
+ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@<HU-IP> "echo ok"
 ```
 
 ---
@@ -46,7 +47,7 @@ ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@172.16.0.1 "echo ok"
 ## Шаг 3. Установить одной командой
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName 172.16.0.1
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName <HU-IP>
 ```
 
 Скрипт делает:
@@ -76,7 +77,7 @@ ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@172.16.0.1 "echo ok"
 Пример с нестандартным ключом и IP (Wi-Fi хотспот):
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName 172.16.222.97 -KeyPath "$HOME\.ssh\id_mgu"
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/daniloz095/VMG-Utility/main/kit/tools/install.ps1))) -HostName <HU-IP> -KeyPath "$HOME\.ssh\id_mgu"
 ```
 
 ---
@@ -86,7 +87,7 @@ ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@172.16.0.1 "echo ok"
 ```powershell
 git clone https://github.com/daniloz095/VMG-Utility.git
 cd VMG-Utility
-.\kit\tools\install.ps1 -HostName 172.16.0.1
+.\kit\tools\install.ps1 -HostName <HU-IP>
 ```
 
 ---
@@ -94,7 +95,7 @@ cd VMG-Utility
 ## Удаление
 
 ```powershell
-ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@172.16.0.1 "rm -rf /var/opt/private/oap/m_vitals_plus; killall oap-mainapp"
+ssh -i "$env:USERPROFILE\.ssh\mgu_root_key" root@<HU-IP> "rm -rf /var/opt/private/oap/m_vitals_plus; killall oap-mainapp"
 ```
 
 ---
