@@ -70,6 +70,7 @@ param(
     [string]$AppId     = 'm_vitals_plus',
     [string]$HostName,
     [string]$KeyPath   = (Join-Path $env:USERPROFILE '.ssh\mgu_root_key'),
+    [string]$EnrollDir,
     [string]$User      = 'root',
     [string]$RemoteBase = '/var/opt/private/oap',
     [string]$Repo      = 'daniloz095/VMG-Utility',
@@ -91,6 +92,49 @@ function Fail($msg) {
     Write-Host 'Press Enter to close this window...' -ForegroundColor Yellow
     Read-Host | Out-Null
     exit 1
+}
+
+function Get-SshEnrollment {
+    param([string]$EnrollDir)
+    # The idrive7-8-ssh-root / ssh_enable tool saves an enrollment record
+    # (connect.txt with the MGU IP + ssh command) next to the private key
+    # (id_rsa) under ...\data\enrollments\<VIN>\. Find it and return {IP, Key}.
+    $conn = $null
+    if ($EnrollDir) {
+        if (Test-Path -LiteralPath $EnrollDir -PathType Leaf) { $conn = Get-Item -LiteralPath $EnrollDir }
+        elseif (Test-Path -LiteralPath $EnrollDir -PathType Container) {
+            $conn = Get-ChildItem -LiteralPath $EnrollDir -Recurse -Filter 'connect.txt' -ErrorAction SilentlyContinue | Select-Object -First 1
+        }
+    } else {
+        $roots = @(
+            (Join-Path $env:USERPROFILE 'Downloads'),
+            (Join-Path $env:USERPROFILE 'Desktop'),
+            (Join-Path $env:USERPROFILE 'Documents'),
+            (Join-Path $env:USERPROFILE 'OneDrive\Downloads'),
+            (Join-Path $env:USERPROFILE 'OneDrive\Desktop')
+        )
+        foreach ($r in $roots) {
+            if (-not (Test-Path -LiteralPath $r)) { continue }
+            $conn = Get-ChildItem -LiteralPath $r -Recurse -Filter 'connect.txt' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.FullName -match 'enroll' } |
+                    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($conn) { break }
+        }
+    }
+    if (-not $conn) { return $null }
+    $txt = Get-Content -LiteralPath $conn.FullName -Raw -ErrorAction SilentlyContinue
+    if (-not $txt) { return $null }
+    $ip = $null; $key = $null
+    if ($txt -match 'root@([0-9.]+)') { $ip = $Matches[1] }
+    if (-not $ip -and $txt -match '(?:MGU\s+IP|IP)\s*[:=]\s*([0-9.]+)') { $ip = $Matches[1] }
+    if ($txt -match '-i\s+"([^"]+)"') { $key = $Matches[1] }
+    if (-not $key -and $txt -match '-i\s+([^\s"]+)') { $key = $Matches[1] }
+    if (-not $key) {
+        $c = Get-ChildItem -LiteralPath (Split-Path -Parent $conn.FullName) -Filter 'id_rsa' -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($c) { $key = $c.FullName }
+    }
+    if ($ip -or $key) { return [pscustomobject]@{ IP = $ip; Key = $key } }
+    return $null
 }
 
 function Get-LatestReleasePackage {
@@ -116,7 +160,16 @@ function Get-LatestReleasePackage {
     return $out
 }
 
-if (-not $HostName) { Fail 'HostName is required (the head unit IP, e.g. -HostName 172.16.0.1).' }
+# Auto-detect the MGU IP / SSH key from the idrive7-8-ssh-root / ssh_enable
+# enrollment (connect.txt + id_rsa) when not provided or the default key is missing.
+if ((-not $HostName) -or (-not (Test-Path -LiteralPath $KeyPath))) {
+    $enroll = Get-SshEnrollment -EnrollDir $EnrollDir
+    if ($enroll) {
+        if (-not $HostName -and $enroll.IP) { $HostName = $enroll.IP; Write-Step "Auto-detected HU IP: $HostName" }
+        if ((-not (Test-Path -LiteralPath $KeyPath)) -and $enroll.Key) { $KeyPath = $enroll.Key; Write-Step "Auto-detected SSH key: $KeyPath" }
+    }
+}
+if (-not $HostName) { Fail 'HostName is required (the head unit IP, e.g. -HostName 169.254.x.x — the Gateway shown by idrive7-8-ssh-root).' }
 
 # --- tool checks -------------------------------------------------------------
 foreach ($bin in 'ssh', 'scp', 'tar') {
